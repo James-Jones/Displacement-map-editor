@@ -1,0 +1,143 @@
+<html>
+
+<body onload="init()">
+
+<canvas id="myCanvas" width="256" height="256" style="border:0px solid #c3c3c3;" onclick="canvasClick()">
+Your browser does not support the canvas element.
+</canvas>
+
+<br>
+<br>
+
+<input type="range" id="baseHeightSlider" min="0" max="255" value="0" step="5" onchange="baseHeightChanged(this.value)" />
+<span id="range">0</span>
+
+<br>
+<br>
+
+<input type="range" id="brushHeightSlider" min="0" max="255" value="0" step="5" onchange="brushHeightChanged(this.value)" />
+<span id="brushRange">0</span>
+
+<br>
+<br>
+
+<form>
+    <input type="radio" name="brushType" value="Point brush" checked="checked" onchange="brushTypeChanged(this.value)"/>Point brush<br />
+    <input type="radio" name="brushType" value="Rect brush" onchange="brushTypeChanged(this.value)"/>Rect brush<br />
+    <input type="radio" name="brushType" value="Bezier brush" onchange="brushTypeChanged(this.value)"/>Beizer brush
+</form>
+
+<br>
+<br>
+
+<button type="button" id="undoBtn" onclick="undo()">Undo</button>
+
+
+<script type="text/javascript">
+
+var BaseHeight = 0;
+var BrushHeight = 0xA0;
+
+var gCanvas=document.getElementById("myCanvas");
+var ctx=gCanvas.getContext("2d");
+
+var currentBrushType = "Point brush";
+var previousBrushType = "Point brush";
+
+var imgData;
+
+function init()
+{
+    document.getElementById("baseHeightSlider").value = BaseHeight;
+    document.getElementById("brushHeightSlider").value = BrushHeight;
+    baseHeightChanged(BaseHeight);
+    brushHeightChanged(BrushHeight);
+}
+
+function baseHeightChanged(newValue)
+{
+	document.getElementById("range").innerHTML=newValue;
+	BaseHeight = newValue;
+    ctx.fillStyle= "rgb(" + BaseHeight + ", " + BaseHeight + ", " + BaseHeight + ");";
+    ctx.fillRect(0,0,256,256);
+}
+
+function brushHeightChanged(newValue)
+{
+	document.getElementById("brushRange").innerHTML=newValue;
+	BrushHeight = newValue;
+}
+
+function canvasClick(event)
+{
+    event = event || window.event;
+    
+    gCanvas=document.getElementById("myCanvas");
+    
+    x = event.pageX - gCanvas.offsetLeft,
+    y = event.pageY - gCanvas.offsetTop;
+    
+    TotalHeight = BrushHeight;// + BaseHeight;
+	
+	storeImage();
+    
+    if(currentBrushType == "Point brush")
+    {
+        ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
+        ctx.fillRect(x-2,y-2,4,4);
+    }
+    //else
+    if(currentBrushType == "Rect brush")
+    {
+        //ctx.fillStyle="yellow";
+		ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
+        ctx.fillRect(x-2,y-2,4,4);
+        ctx.lineTo(x, y);
+    }
+}
+
+function brushTypeChanged(newType)
+{
+	storeImage();
+	
+	previousBrushType = currentBrushType;
+    currentBrushType = newType;
+    
+    if(previousBrushType == "Rect brush")
+    {
+        ctx.fill();
+    }
+    
+    if(newType == "Rect brush")
+    {
+        ctx.strokeStyle="orange";
+        ctx.beginPath();
+    }
+}
+
+function storeImage()
+{
+	imgData=ctx.getImageData(0,0,256,256);
+	//A new action can be undone.
+	document.getElementById("undoBtn").disabled="";
+}
+
+function undo()
+{
+	ctx.putImageData(imgData,0,0);
+	//Only 1 action can be undone at the moment.
+	document.getElementById("undoBtn").disabled="disabled";
+}
+
+function sendImage()
+{
+    imgData=ctx.getImageData(0,0,256,256);
+}
+
+
+</script>
+
+</body>
+
+</html>
+
