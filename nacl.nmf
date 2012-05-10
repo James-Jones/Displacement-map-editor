@@ -1,0 +1,68 @@
+{
+  "files": {
+    "main.nexe": {
+      "x86-64": {
+        "url": "nacl_x86_64.nexe"
+      },
+      "x86-32": {
+        "url": "nacl_x86_32.nexe"
+      }
+    },
+    "libstdc++.so.6": {
+      "x86-64": {
+        "url": "lib64/libstdc++.so.6"
+      },
+      "x86-32": {
+        "url": "lib32/libstdc++.so.6"
+      }
+    },
+    "libppapi_gles2.so": {
+      "x86-64": {
+        "url": "lib64/libppapi_gles2.so"
+      },
+      "x86-32": {
+        "url": "lib32/libppapi_gles2.so"
+      }
+    },
+    "libc.so.3c8d1f2e": {
+      "x86-64": {
+        "url": "lib64/libc.so.3c8d1f2e"
+      },
+      "x86-32": {
+        "url": "lib32/libc.so.3c8d1f2e"
+      }
+    },
+    "libgcc_s.so.1": {
+      "x86-64": {
+        "url": "lib64/libgcc_s.so.1"
+      },
+      "x86-32": {
+        "url": "lib32/libgcc_s.so.1"
+      }
+    },
+    "libm.so.3c8d1f2e": {
+      "x86-64": {
+        "url": "lib64/libm.so.3c8d1f2e"
+      },
+      "x86-32": {
+        "url": "lib32/libm.so.3c8d1f2e"
+      }
+    },
+    "libpthread.so.3c8d1f2e": {
+      "x86-64": {
+        "url": "lib64/libpthread.so.3c8d1f2e"
+      },
+      "x86-32": {
+        "url": "lib32/libpthread.so.3c8d1f2e"
+      }
+    }
+  },
+  "program": {
+    "x86-64": {
+      "url": "lib64/runnable-ld.so"
+    },
+    "x86-32": {
+      "url": "lib32/runnable-ld.so"
+    }
+  }
+}
