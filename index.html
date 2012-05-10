@@ -2,7 +2,7 @@
 
 <body onload="init()">
 
-<canvas id="myCanvas" width="256" height="256" style="border:0px solid #c3c3c3;" onclick="canvasClick()">
+<canvas id="myCanvas" width="256" height="256" style="border:0px solid #c3c3c3;" onmousedown="canvasMouseDown()" onmouseup="canvasMouseUp()" onmousemove="canvasMouseMove()">
 Your browser does not support the canvas element.
 </canvas>
 
@@ -46,6 +46,9 @@ var previousBrushType = "Point brush";
 
 var imgData;
 
+var ctrlKeyDown = false;
+var mouseDown = false;
+
 function init()
 {
     document.getElementById("baseHeightSlider").value = BaseHeight;
@@ -68,7 +71,7 @@ function brushHeightChanged(newValue)
 	BrushHeight = newValue;
 }
 
-function canvasClick(event)
+function canvasApplyBrush(event)
 {
     event = event || window.event;
     
@@ -94,6 +97,26 @@ function canvasClick(event)
         ctx.fillRect(x-2,y-2,4,4);
         ctx.lineTo(x, y);
     }
+}
+
+function canvasMouseMove(event)
+{
+	if(mouseDown)
+	{
+		canvasApplyBrush(event);
+	}
+}
+
+function canvasMouseDown(event)
+{
+	mouseDown = true;
+	canvasApplyBrush(event);
+}
+
+function canvasMouseUp(event)
+{
+	mouseDown = false;
+	canvasApplyBrush(event);
 }
 
 function brushTypeChanged(newType)
@@ -128,12 +151,6 @@ function undo()
 	//Only 1 action can be undone at the moment.
 	document.getElementById("undoBtn").disabled="disabled";
 }
-
-function sendImage()
-{
-    imgData=ctx.getImageData(0,0,256,256);
-}
-
 
 </script>
 
