@@ -12,6 +12,7 @@
 #include "ppapi/c/ppp.h"
 #include "ppapi/c/ppp_instance.h"
 #include "ppapi/c/ppp_messaging.h"
+#include "ppapi/c/ppp_input_event.h"
 
 #include "ppapi/c/ppb_core.h"
 #include "ppapi/c/ppb_view.h"
@@ -30,11 +31,12 @@ static PPB_Graphics3D* g3d = NULL;
 static PPB_Instance* inst = NULL;
 static PPB_View* view = NULL;
 static PPB_Core* core = NULL;
+static PPB_Var* var = NULL;
 
 int32_t pluginWidth;
 int32_t pluginHeight;
 PP_Instance myInstance;
-PP_Resource context;
+static PP_Resource context;
 
 #ifdef DEBUG_MESSAGES
 	/**
@@ -257,6 +259,8 @@ PP_EXPORT int32_t PPP_InitializeModule(PP_Module a_module_id,
 
   core = (PPB_Core*)get_browser(PPB_CORE_INTERFACE);
 
+  var = (PPB_Var*)get_browser(PPB_VAR_INTERFACE);
+
   
   cb.func = 0;//FlickerAndPaint;
   cb.user_data = 0;
@@ -267,6 +271,41 @@ PP_EXPORT int32_t PPP_InitializeModule(PP_Module a_module_id,
   return PP_OK;
 }
 
+void Messaging_HandleMessage(PP_Instance instance, struct PP_Var message)
+{
+    uint32_t ui32MessageLength = 0;
+    const char* pszMessage = 0;
+    
+    switch(message.type)
+    {
+        case PP_VARTYPE_STRING:
+        {
+            pszMessage = var->VarToUtf8(message, &ui32MessageLength);
+            DemoHandleString(pszMessage, ui32MessageLength);
+            break;
+        }
+        case PP_VARTYPE_NULL:
+        case PP_VARTYPE_BOOL:
+        case PP_VARTYPE_INT32:
+        case PP_VARTYPE_DOUBLE:
+        case PP_VARTYPE_OBJECT:
+        case PP_VARTYPE_ARRAY:
+        case PP_VARTYPE_DICTIONARY:
+        case PP_VARTYPE_ARRAY_BUFFER:
+        case PP_VARTYPE_UNDEFINED:
+        default:
+        {
+            break;
+        }
+    }
+}
+
+
+PP_Bool InputEvent_HandleEvent(PP_Instance instance_id, PP_Resource input_event)
+{
+    return PP_TRUE;
+}
+
 
 /**
  * Returns an interface pointer for the interface of the given name, or NULL
@@ -275,7 +314,8 @@ PP_EXPORT int32_t PPP_InitializeModule(PP_Module a_module_id,
  * @return pointer to the interface
  */
 PP_EXPORT const void* PPP_GetInterface(const char* interface_name) {
-  if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0) {
+  
+    /*if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0) {
     static PPP_Instance instance_interface = {
       &Instance_DidCreate,
       &Instance_DidDestroy,
@@ -284,7 +324,42 @@ PP_EXPORT const void* PPP_GetInterface(const char* interface_name) {
       &Instance_HandleDocumentLoad,
     };
     return &instance_interface;
+  }*/
+
+  static PPP_Instance instance_interface = 
+  {
+    &Instance_DidCreate,
+    &Instance_DidDestroy,
+    &Instance_DidChangeView,
+    &Instance_DidChangeFocus,
+    &Instance_HandleDocumentLoad
+  };
+
+  static PPP_InputEvent input_event_interface = 
+  {
+    &InputEvent_HandleEvent
+  };
+
+  static PPP_Messaging messaging_interface =
+  {
+      &Messaging_HandleMessage
+  };
+
+  if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0)
+  {
+    return &instance_interface;
   }
+
+  if (strcmp(interface_name, PPP_INPUT_EVENT_INTERFACE) == 0)
+  {
+    return &input_event_interface;
+  }
+
+  if(strcmp(interface_name, PPP_MESSAGING_INTERFACE) == 0)
+  {
+      return &messaging_interface;
+  }
+
   return NULL;
 }
 

@@ -177,6 +177,23 @@ function brushHeightChanged(newValue)
 	BrushHeight = newValue;
 }
 
+function sendImageToNativeClient()
+{
+	var msg = '';//imgData.data.toString();
+	
+	//var imageData = ctx.getImageData(0, 0, 500, 500),
+    var data = imgData.data;
+    var len = data.length;
+
+	for (var i = 0; i < len; i += 4)
+	{
+		var pixelValue = data[i].toString();
+		msg = msg.concat(pixelValue.concat(' '));
+	}
+
+	NativeClientModule.postMessage(msg);
+}
+
 function canvasApplyBrush(event)
 {
     event = event || window.event;
@@ -202,6 +219,8 @@ function canvasApplyBrush(event)
         ctx.fillRect(x-2,y-2,4,4);
         ctx.lineTo(x, y);
     }
+	
+	sendImageToNativeClient();
 }
 
 function canvasMouseMove(event)
