@@ -25,6 +25,8 @@ const uint32_t VA_TEXCOORD_INDEX = 1;
 
 float Transform[4][4];
 
+GLubyte* textureImage = 0;
+
 GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, const char* ps)
 {
 	GLuint shaders[2];
@@ -155,22 +157,19 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL)
 
     gl->GenTextures(context, 1, &uiDisplacementMapTexture);
 
-    GLubyte* data = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+    if(!textureImage)
+    {
+        textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
 
-    memset(data, 0xFF, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+        memset(textureImage, 0, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+    }
 
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
 
-    gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, 0);
+    gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
 
-
-			//redefine standard texture values
-			gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); /* We will use linear
-			interpolation for magnification filter */
-			gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); /* We will use linear
-			interpolation for minifying filter */
-
-    free(data);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     QuadInit(1, 1, &vbo, &ibo);
 
@@ -198,26 +197,24 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
     uint32_t i = 0;
     char* nextStr = (char*)str;
 
-    GLubyte* data = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
-
-    memset(data, 0, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+    //memset(textureImage, 0, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
 
     nextStr = strtok(nextStr, " ");
     while((nextStr != 0) && (i < ui32StrLength))
     {
-        data[i] = atoi(nextStr);
+        textureImage[i] = atoi(nextStr);
         nextStr = strtok(0, " ");
 
         ++i;
     }
 
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
-    gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
-
-    free(data);
+    gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
 }
 
 void DemoEnd()
 {
+    free(textureImage);
+    textureImage = 0;
 }
 
