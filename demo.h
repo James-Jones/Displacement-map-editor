@@ -14,7 +14,7 @@
 
 extern void SendInteger(int val);
 
-void DemoInit(PP_Resource context, PPB_OpenGLES2* gl);
+void DemoInit(PP_Resource context, PPB_OpenGLES2* gl, int width, int height);
 
 void DemoRender(PP_Resource context, PPB_OpenGLES2* gl);
 

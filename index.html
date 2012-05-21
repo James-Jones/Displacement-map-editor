@@ -179,19 +179,22 @@ function brushHeightChanged(newValue)
 
 function sendImageToNativeClient()
 {
-	var msg = '';//imgData.data.toString();
-	
-	//var imageData = ctx.getImageData(0, 0, 500, 500),
-    var data = imgData.data;
-    var len = data.length;
+    if(NativeClientModule != null)
+    {
+	    var msg = '';//imgData.data.toString();
+    	
+	    //var imageData = ctx.getImageData(0, 0, 500, 500),
+        var data = imgData.data;
+        var len = data.length;
 
-	for (var i = 0; i < len; i += 4)
-	{
-		var pixelValue = data[i].toString();
-		msg = msg.concat(pixelValue.concat(' '));
-	}
+	    for (var i = 0; i < len; i += 4)
+	    {
+		    var pixelValue = data[i].toString();
+		    msg = msg.concat(pixelValue.concat(' '));
+	    }
 
-	NativeClientModule.postMessage(msg);
+	    NativeClientModule.postMessage(msg);
+    }
 }
 
 function canvasApplyBrush(event)
