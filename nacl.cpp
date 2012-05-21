@@ -107,7 +107,7 @@ void InitGL(void* user_data, int32_t result)
 	gl->ClearColor(context, 0.0f, 1.0f, 0.0f, 1.0f);
 	gl->Clear(context, GL_COLOR_BUFFER_BIT);
 
-	DemoInit(context, gl);
+	DemoInit(context, gl, pluginWidth, pluginHeight);
 
 	swapBuffersCallback.func = 0;
 	swapBuffersCallback.user_data = 0;

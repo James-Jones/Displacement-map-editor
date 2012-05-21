@@ -38,6 +38,7 @@ GLuint GLProgram;
 //Vertex input locations
 const uint32_t VA_POSITION_INDEX = 0; //VA=Vertex array
 const uint32_t VA_TEXCOORD_INDEX = 1;
+const uint32_t VA_NORMAL_INDEX = 2;
 
 //Timer
 timeval startTime;
@@ -116,6 +117,7 @@ GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, con
 
 	gl->BindAttribLocation(context, program, VA_POSITION_INDEX, "Position");
     gl->BindAttribLocation(context, program, VA_TEXCOORD_INDEX, "TexCoords0");
+    gl->BindAttribLocation(context, program, VA_NORMAL_INDEX, "Normal");
 	
 	gl->LinkProgram(context, program);
 	gl->GetProgramiv(context, program, GL_LINK_STATUS, &status);
@@ -133,9 +135,9 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     uint16_t* pui16Indices;
     float* pfVertices;
     float* pfTexCoords;
+    float* pfNormals;
     int idx;
     int vtx;
-    int tc;
     int iNumIndices;
     int iNumVertices;
     float fMinX;
@@ -150,6 +152,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     cJSON *psIndices;
     cJSON *psVertices;
     cJSON *psTexCoords;
+    cJSON *psNormals;
     cJSON* psBoundingBox;
     float fScale;
 
@@ -185,6 +188,14 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
         cJSON_Delete(psRoot);
         return;
     }
+    
+    psNormals = cJSON_GetObjectItem(psRoot,"normal");
+    if(!psNormals)
+    {
+        DBG_LOG("No normals JSON");
+        cJSON_Delete(psRoot);
+        return;
+    }
 
     psBoundingBox = cJSON_GetObjectItem(psRoot, "bndbox");
     if(!psBoundingBox)
@@ -208,39 +219,45 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
 
     pfVertices = (float*)malloc(sizeof(float) * iNumVertices * 3);
     pfTexCoords = (float*)malloc(sizeof(float) * iNumVertices * 3);
-
-    tc = 0;
+    pfNormals = (float*)malloc(sizeof(float) * iNumVertices * 3);
     for(vtx = 0; vtx < (iNumVertices * 3);)
     {
         cJSON* psVertex;
         cJSON* psTexC;
+        cJSON* psNrm;
 
         psVertex = cJSON_GetArrayItem(psVertices, vtx);
         pfVertices[vtx] = psVertex->valuedouble;
 
-        psTexC = cJSON_GetArrayItem(psTexCoords, tc);
-        pfTexCoords[tc] = psTexC->valuedouble;
+        psTexC = cJSON_GetArrayItem(psTexCoords, vtx);
+        pfTexCoords[vtx] = psTexC->valuedouble;
+
+        psNrm = cJSON_GetArrayItem(psNormals, vtx);
+        pfNormals[vtx] = psNrm->valuedouble;
 
         ++vtx;
-        ++tc;
 
         psVertex = cJSON_GetArrayItem(psVertices, vtx);
         pfVertices[vtx] = psVertex->valuedouble;
 
-        psTexC = cJSON_GetArrayItem(psTexCoords, tc);
-        pfTexCoords[tc] = psTexC->valuedouble;
+        psTexC = cJSON_GetArrayItem(psTexCoords, vtx);
+        pfTexCoords[vtx] = psTexC->valuedouble;
+
+        psNrm = cJSON_GetArrayItem(psNormals, vtx);
+        pfNormals[vtx] = psNrm->valuedouble;
 
         ++vtx;
-        ++tc;
 
         psVertex = cJSON_GetArrayItem(psVertices, vtx);
         pfVertices[vtx] = psVertex->valuedouble;
 
-        psTexC = cJSON_GetArrayItem(psTexCoords, tc);
-        pfTexCoords[tc] = psTexC->valuedouble;
+        psTexC = cJSON_GetArrayItem(psTexCoords, vtx);
+        pfTexCoords[vtx] = psTexC->valuedouble;
+
+        psNrm = cJSON_GetArrayItem(psNormals, vtx);
+        pfNormals[vtx] = psNrm->valuedouble;
 
         ++vtx;
-        ++tc;
     }
 
     fMinX = cJSON_GetArrayItem(psBoundingBox, 0)->valuedouble;
@@ -275,9 +292,10 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     gl->GenBuffers(context, 1, puiIBO);
 
     gl->BindBuffer(context, GL_ARRAY_BUFFER, *puiVBO);
-    gl->BufferData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*6), NULL, GL_STATIC_DRAW);
+    gl->BufferData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*9), NULL, GL_STATIC_DRAW);
     gl->BufferSubData(context, GL_ARRAY_BUFFER, 0, sizeof(GLfloat)*(iNumVertices*3), pfVertices);
     gl->BufferSubData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*3), sizeof(GLfloat)*(iNumVertices*3), pfTexCoords);
+    gl->BufferSubData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*6), sizeof(GLfloat)*(iNumVertices*3), pfNormals);
     gl->BindBuffer(context, GL_ARRAY_BUFFER, 0);
 
     gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, *puiIBO);
@@ -318,16 +336,25 @@ void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices
     gl->UniformMatrix4fv(context, gl->GetUniformLocation(context, GLProgram, "Transform"), 1, GL_FALSE, (float*)&afTransform[0][0]);
     gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "TextureBase"), 0);
 
+    gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "DispMap"), 1);
+
+    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "DISPLACEMENT_COEFFICIENT"), 2.0f);
+
+    gl->ActiveTexture(context, GL_TEXTURE0+1);
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+    gl->ActiveTexture(context, GL_TEXTURE0);
+    gl->BindTexture(context, GL_TEXTURE_2D, uiMeshBaseTexture);
 
     gl->BindBuffer(context, GL_ARRAY_BUFFER, uiVBO);
     gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, uiIBO);
 
     gl->EnableVertexAttribArray(context, VA_POSITION_INDEX);
     gl->EnableVertexAttribArray(context, VA_TEXCOORD_INDEX);
+    gl->EnableVertexAttribArray(context, VA_NORMAL_INDEX);
 
     gl->VertexAttribPointer(context, VA_POSITION_INDEX, 3, GL_FLOAT, GL_FALSE, 0, 0);
     gl->VertexAttribPointer(context, VA_TEXCOORD_INDEX, 3, GL_FLOAT, GL_FALSE, 0, (char*)(sizeof(GLfloat)*(iNumVertices*3)));
+    gl->VertexAttribPointer(context, VA_NORMAL_INDEX, 3, GL_FLOAT, GL_FALSE, 0, (char*)(sizeof(GLfloat)*(iNumVertices*6)));
 
     gl->DrawElements(context, GL_TRIANGLES, iNumIndices, GL_UNSIGNED_SHORT, 0);
 }
@@ -338,6 +365,12 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
     const float aspectRatio = (float)width / (float)height;
     const float fieldOfView = 45.0f;
 
+        unsigned char* jpeg = 0;
+        int jpegWidth = 0;
+        int jpegHeight = 0;
+        int iNumComponents = 0;
+        GLenum eFormat;
+
     gl = inGL;
     context = inContext;
 
@@ -347,11 +380,6 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
     if(!textureImage) //First time init has been called
     {
-        unsigned char* jpeg = 0;
-        int jpegWidth = 0;
-        int jpegHeight = 0;
-        int iNumComponents = 0;
-        GLenum eFormat;
         textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
 
         memset(textureImage, 0, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
@@ -360,6 +388,21 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
         ui64BaseTimeMS = GetElapsedTimeMS();
         angle = 0;
+
+    }
+
+        GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
+
+        gl->GenTextures(context, 1, &uiDisplacementMapTexture);
+
+        gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+
+        gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+
+        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+
 
         gl->GenTextures(context, 1, &uiMeshBaseTexture);
 
@@ -371,6 +414,11 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
   // to either 1 (grayscale) or 3 (RGB).
         jpeg = jpgd::decompress_jpeg_image_from_memory(psz_checkerboard_jpg, sizeof(psz_checkerboard_jpg), 
                                        &jpegWidth, &jpegHeight, &iNumComponents, 3);
+
+        if(!jpeg)
+        {
+            DBG_LOG("Bad jpeg texture");
+        }
 
         switch(iNumComponents)
         {
@@ -385,23 +433,11 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
             break;
         }
 
-        gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, jpegWidth, GL_UNSIGNED_BYTE, jpeg);
+        gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
 
         gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-    }
-
-        GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
-
-        gl->GenTextures(context, 1, &uiDisplacementMapTexture);
-
-        gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
-
-        gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
-
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
         Identity(jsonMeshTransform.camera);
         LookAt(jsonMeshTransform.camera,
