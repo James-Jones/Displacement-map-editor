@@ -68,8 +68,6 @@ void DrawFrame(void* user_data, int32_t result)
 {
 	PP_CompletionCallback swapBuffersCallback;
 
-	//DBG_LOG("DrawFrame");
-
 	DemoRender(context, gl);
 
 	swapBuffersCallback.func = DrawFrame;
@@ -96,8 +94,6 @@ void InitGL(void* user_data, int32_t result)
 	};
 	
 	PP_CompletionCallback swapBuffersCallback;
-
-	DBG_LOG("InitGL");
 
 	context = g3d->Create(myInstance, NULL, attribs);
 	inst->BindGraphics(myInstance, context);

@@ -8,13 +8,13 @@
         margin-top: 0px;
         margin-right: 0px;
         margin-bottom: 0px;
-        background-color: FFFFFF;
+        background-color: BDBDAE;
+        overflow: hidden;
         }
-	</style>
+    </style>
 
 <!-- js script for Native Client -->
 <script type="text/javascript">
-
 NativeClientModule = null;  // Global application object.
 statusText = 'NO-STATUS';
 
@@ -82,11 +82,11 @@ function updateStatus(opt_message)
 </script>
 </head>
 
-<body onload="init()">
+<body onload="init()" scroll="no" >
 
-<table border="0">
-	<tr>
-		<td id="listener" style="width:55pc;height:43pc">
+<table border="0" scroll="no" width="100%" height="100%" align="center">
+	<tr scroll="no">
+		<td id="listener" width="50%" height="50%" align="center" >
 			<script type="text/javascript">
 				var listener = document.getElementById('listener')
 				listener.addEventListener('load', moduleDidLoad, true);
@@ -97,37 +97,48 @@ function updateStatus(opt_message)
 			
 			<embed name="nacl_module"
 				   id="nacl"
-				   width="100%" height="100%"
+				   width="100%" height="80%"
 				   src="nacl.nmf"
 				   type="application/x-nacl" />
 		</td>
-		<td style="width:55pc;height:43pc" align="center">
+		<td align="center">
 			<br/>
 			<br/>
 
 			<canvas id="myCanvas" width="256" height="256" style="border:0px solid #c3c3c3;" onmousedown="canvasMouseDown()" onmouseup="canvasMouseUp()" onmousemove="canvasMouseMove()">
 			Your browser does not support the canvas element.
 			</canvas>
-
+            
+            <br>
 			<br>
-			<br>
 
-			<input type="range" id="baseHeightSlider" min="0" max="255" value="0" step="5" onchange="baseHeightChanged(this.value)" />
+            Global height  <input type="range" id="baseHeightSlider" min="0" max="255" value="0" step="5" onchange="baseHeightChanged(this.value)" />
 			<span id="range">0</span>
 
 			<br>
 			<br>
 
-			<input type="range" id="brushHeightSlider" min="0" max="255" value="0" step="5" onchange="brushHeightChanged(this.value)" />
+            Brush height  <input type="range" id="brushHeightSlider" min="0" max="255" value="0" step="5" onchange="brushHeightChanged(this.value)" />
 			<span id="brushRange">0</span>
 
 			<br>
 			<br>
 
+            Brush size <input type="range" id="brushSizeSlider" min="0" max="10" value="0" step="1" onchange="brushSizeChanged(this.value)" />
+            <span id="brushSizeRange">0</span>
+
+            <br>
+            <br>
+
+            Displacment factor  <input type="range" id="dispCoeffSlider" min="0" max="1" value="0" step="0.1" onchange="sendDispCoeffToNativeClient(this.value)" />
+            <span id="dispCoeff">0</span>
+
+            <br>
+            <br>
+                    
 			<form>
 				<input type="radio" name="brushType" value="Point brush" checked="checked" onchange="brushTypeChanged(this.value)"/>Point brush<br />
 				<input type="radio" name="brushType" value="Rect brush" onchange="brushTypeChanged(this.value)"/>Rect brush<br />
-				<input type="radio" name="brushType" value="Bezier brush" onchange="brushTypeChanged(this.value)"/>Beizer brush
 			</form>
 
 			<br>
@@ -142,6 +153,7 @@ function updateStatus(opt_message)
 <script type="text/javascript">
 var BaseHeight = 0;
 var BrushHeight = 0xA0;
+var brushSize = 4;
 
 var gCanvas=document.getElementById("myCanvas");
 var ctx=gCanvas.getContext("2d");
@@ -159,8 +171,10 @@ function init()
 	pageDidLoad();
     document.getElementById("baseHeightSlider").value = BaseHeight;
     document.getElementById("brushHeightSlider").value = BrushHeight;
+    document.getElementById("brushSizeSlider").value = brushSize;
     baseHeightChanged(BaseHeight);
     brushHeightChanged(BrushHeight);
+    brushSizeChanged(brushSize);
 }
 
 function baseHeightChanged(newValue)
@@ -175,6 +189,24 @@ function brushHeightChanged(newValue)
 {
 	document.getElementById("brushRange").innerHTML=newValue;
 	BrushHeight = newValue;
+}
+
+
+function brushSizeChanged(newValue)
+{
+	document.getElementById("brushSizeRange").innerHTML=newValue;
+	brushSize = newValue;
+}
+
+function sendDispCoeffToNativeClient(val)
+{
+    var fval = parseFloat(val)
+    document.getElementById("dispCoeff").innerHTML=fval.toFixed(4)
+    if(NativeClientModule != null)
+    {
+        var msg = "DISPCOEFF" + val.toString();
+        NativeClientModule.postMessage(msg);
+    }
 }
 
 function sendImageToNativeClient()
@@ -213,13 +245,13 @@ function canvasApplyBrush(event)
     if(currentBrushType == "Point brush")
     {
         ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
-        ctx.fillRect(x-2,y-2,4,4);
+        ctx.fillRect(x-(brushSize/2),y-(brushSize/2),brushSize,brushSize);
     }
     else
     if(currentBrushType == "Rect brush")
     {
 		ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
-        ctx.fillRect(x-2,y-2,4,4);
+        ctx.fillRect(x-(brushSize/2),y-(brushSize/2),brushSize,brushSize);
         ctx.lineTo(x, y);
     }
 	

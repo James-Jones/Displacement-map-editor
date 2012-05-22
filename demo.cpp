@@ -4,7 +4,6 @@
 
 #include "textured_vs.h"
 #include "textured_ps.h"
-//#include "cube_json.h"
 
 #include "cube_json.h"
 
@@ -61,6 +60,8 @@ GLuint jsonIBO;
 int jsonIdxCount;
 int jsonVtxCount;
 Transformations jsonMeshTransform;
+
+float dispCoeff = 0;
 
 
 uint64_t GetElapsedTimeMS()
@@ -338,7 +339,7 @@ void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices
 
     gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "DispMap"), 1);
 
-    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "DISPLACEMENT_COEFFICIENT"), 2.0f);
+    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "DISPLACEMENT_COEFFICIENT"), dispCoeff);
 
     gl->ActiveTexture(context, GL_TEXTURE0+1);
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
@@ -457,7 +458,7 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
     uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
 
-    gl->ClearColor(context, 1.0f, 0.0f, 0.0f, 1.0f);
+    gl->ClearColor(context, 0.5, 0.5, 0.5, 1.0f);
     gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     gl->Enable(context, GL_DEPTH_TEST);
@@ -495,18 +496,36 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
     uint32_t i = 0;
     char* nextStr = (char*)str;
 
-    //Convert space delimited string of texels to integer values
-    nextStr = strtok(nextStr, " ");
-    while((nextStr != 0) && (i < ui32StrLength))
+    //Check for DISPCOEFF
+    if( (ui32StrLength > 9) &&
+        (nextStr[0] == 'D') && 
+        (nextStr[1] == 'I') &&
+        (nextStr[2] == 'S') &&
+        (nextStr[3] == 'P') &&
+        (nextStr[4] == 'C') &&
+        (nextStr[5] == 'O') &&
+        (nextStr[6] == 'E') &&
+        (nextStr[7] == 'F') &&
+        (nextStr[8] == 'F'))
     {
-        textureImage[i] = atoi(nextStr);
-        nextStr = strtok(0, " ");
-
-        ++i;
+        nextStr += 9;
+        dispCoeff = atof(nextStr);
     }
+    else
+    {
+        //Convert space delimited string of texels to integer values
+        nextStr = strtok(nextStr, " ");
+        while((nextStr != 0) && (i < ui32StrLength))
+        {
+            textureImage[i] = atoi(nextStr);
+            nextStr = strtok(0, " ");
 
-    gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
-    gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+            ++i;
+        }
+
+        gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+        gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+    }
 }
 
 void DemoEnd()
