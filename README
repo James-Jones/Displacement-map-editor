@@ -1,0 +1,11 @@
+
+A displacment map editor built on HTML5, javascript and chrome native client.
+
+How to build:
+  cd into the NaCL\template directory
+  make PATH-TO-SDK-PEPPER-DIR (e.g make e:\nacl_sdk\pepper_18)
+How to run
+  enable native client in chrome from the chrome://flags/ page if you have not already done so
+  start a server by running the provided httpd.py script
+  browse to the port which the script prints out on the command line (e.g http://localhost:5103)
+
