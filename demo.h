@@ -20,6 +20,8 @@ void DemoRender(PP_Resource context, PPB_OpenGLES2* gl);
 
 void DemoUpdate();
 
+void DemoHandleKey(uint32_t ui32KeyCode);
+
 //Message passed from javascript to native client
 void DemoHandleString(const char* str, const uint32_t ui32StrLength);
 

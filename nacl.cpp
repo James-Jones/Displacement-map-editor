@@ -13,6 +13,7 @@
 #include "ppapi/c/ppp_instance.h"
 #include "ppapi/c/ppp_messaging.h"
 #include "ppapi/c/ppp_input_event.h"
+#include "ppapi/c/ppb_input_event.h"
 
 #include "ppapi/c/ppb_core.h"
 #include "ppapi/c/ppb_view.h"
@@ -32,6 +33,8 @@ static PPB_Instance* inst = NULL;
 static PPB_View* view = NULL;
 static PPB_Core* core = NULL;
 static PPB_Var* var = NULL;
+static PPB_InputEvent* psInputEventInterface = NULL;
+static PPB_KeyboardInputEvent* psKeyboard = NULL;
 
 int32_t pluginWidth;
 int32_t pluginHeight;
@@ -142,7 +145,8 @@ static PP_Bool Instance_DidCreate(PP_Instance instance,
                                   const char* argn[],
                                   const char* argv[])
 {
-  return PP_TRUE;
+    psInputEventInterface->RequestInputEvents(instance, PP_INPUTEVENT_CLASS_KEYBOARD | PP_INPUTEVENT_CLASS_MOUSE);
+    return PP_TRUE;
 }
 
 
@@ -257,6 +261,9 @@ PP_EXPORT int32_t PPP_InitializeModule(PP_Module a_module_id,
 
   var = (PPB_Var*)get_browser(PPB_VAR_INTERFACE);
 
+  psInputEventInterface = (PPB_InputEvent*)get_browser(PPB_INPUT_EVENT_INTERFACE);
+
+  psKeyboard = (PPB_KeyboardInputEvent*)get_browser(PPB_KEYBOARD_INPUT_EVENT_INTERFACE);
   
   cb.func = 0;//FlickerAndPaint;
   cb.user_data = 0;
@@ -299,6 +306,17 @@ void Messaging_HandleMessage(PP_Instance instance, struct PP_Var message)
 
 PP_Bool InputEvent_HandleEvent(PP_Instance instance_id, PP_Resource input_event)
 {
+    uint32_t ui32KeyCode;
+    PP_InputEvent_Type eInputEventType = 
+        psInputEventInterface->GetType(input_event);
+
+    if(eInputEventType == PP_INPUTEVENT_TYPE_KEYDOWN)
+    {
+        ui32KeyCode = psKeyboard->GetKeyCode(input_event);
+
+        DemoHandleKey(ui32KeyCode);
+    }
+
     return PP_TRUE;
 }
 

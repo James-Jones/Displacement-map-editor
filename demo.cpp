@@ -314,25 +314,18 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
 void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices, GLuint uiVBO, GLuint uiIBO)
 {
     float afTransform[4][4];//The final matrix
-    float model[4][4];
-    float view[4][4];
     float modelview[4][4];
 
     gl->UseProgram(context, GLProgram);
 
     Identity(afTransform);
 
-    Identity(view);
-    MultMatrix(view, view, psMatrices->camera);
-    
-    Identity(model);
-    MultMatrix(model, model, psMatrices->scale);
-    MultMatrix(model, model, psMatrices->rot);
-    MultMatrix(model, model, psMatrices->xform);
+    Identity(modelview);
+    MultMatrix(modelview, psMatrices->rot, psMatrices->camera);
+    MultMatrix(modelview, psMatrices->scale, modelview);
+    MultMatrix(modelview, psMatrices->xform, modelview);
+    MultMatrix(afTransform,  modelview, psMatrices->projection);
 
-    MultMatrix(modelview, model, view);
-
-	MultMatrix(afTransform,  modelview, psMatrices->projection);
 
     gl->UniformMatrix4fv(context, gl->GetUniformLocation(context, GLProgram, "Transform"), 1, GL_FALSE, (float*)&afTransform[0][0]);
     gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "TextureBase"), 0);
@@ -490,7 +483,19 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 void DemoUpdate()
 {
 }
+#if 0
+void SendJPEGImage(int iImageSize, int iWidth, int iHeight, int iChannelCount, void* pvInImage)
+{
+  // Writes JPEG image to memory buffer. 
+  // On entry, buf_size is the size of the output buffer pointed at by pBuf, which should be at least ~1024 bytes. 
+  // If return value is true, buf_size will be set to the size of the compressed data.
+  bool compress_image_to_jpeg_file_in_memory(void *pBuf, int &buf_size, int width, int height, int num_channels, const uint8 *pImage_data, const params &comp_params = params());
+ 
+    void* pvOutImage = malloc(max(srcSize, 1024));
 
+    jpge::compress_image_to_jpeg_file_in_memory(pvOutImage, &iImageSize, iWidth, iHeight, iChannelCount, pvInImage);
+}
+#endif
 void DemoHandleString(const char* str, const uint32_t ui32StrLength)
 {
     uint32_t i = 0;
@@ -525,6 +530,33 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
 
         gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
         gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+    }
+}
+
+void DemoHandleKey(uint32_t ui32KeyCode)
+{
+    switch(ui32KeyCode)
+    {
+        case 'W':
+        {
+            DBG_LOG("W key");
+            break;
+        }
+        case 'A':
+        {
+            DBG_LOG("A key");
+            break;
+        }
+        case 'S':
+        {
+            DBG_LOG("S key");
+            break;
+        }
+        case 'D':
+        {
+            DBG_LOG("D key");
+            break;
+        }
     }
 }
 
