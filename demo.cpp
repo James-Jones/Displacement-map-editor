@@ -451,7 +451,7 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 {
     float rotY[4][4];
     float rotX[4][4];
-    //char msg[128];
+
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
     uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
 
