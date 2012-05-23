@@ -44,7 +44,8 @@ timeval startTime;
 uint64_t ui64BaseTimeMS;
 
 //Transform
-float angle;
+float angleY;
+float angleX;
 typedef struct
 {
     float projection[4][4];
@@ -381,7 +382,8 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
         gettimeofday(&startTime, NULL);
 
         ui64BaseTimeMS = GetElapsedTimeMS();
-        angle = 0;
+        angleY = 0;
+        angleX = 0;
 
     }
 
@@ -447,6 +449,8 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
 void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 {
+    float rotY[4][4];
+    float rotX[4][4];
     //char msg[128];
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
     uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
@@ -458,21 +462,17 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 
     ui64BaseTimeMS = ui64ElapsedTime;
 
-    //sprintf(msg, "dt=%d", ui64DeltaTimeMS);
-
-    //DBG_LOG(msg);
-
-    //Six degrees per second
-    angle += 0.006f * (ui64DeltaTimeMS);
-
-    if(angle > 360)
-    {
-        angle = 0;
-    }
 
     Identity(jsonMeshTransform.rot);
 
-    Rotate(jsonMeshTransform.rot, 0.f,1.f,0.f, angle);
+    Identity(rotX);
+    Identity(rotY);
+
+    Rotate(rotY, 0.f,1.f,0.f, angleY);
+
+    Rotate(rotX, 1.f,0.f,0.f, angleX);
+
+    MultMatrix(jsonMeshTransform.rot, rotY, rotX);
 
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
     gl->UseProgram(context, GLProgram);
@@ -539,22 +539,22 @@ void DemoHandleKey(uint32_t ui32KeyCode)
     {
         case 'W':
         {
-            DBG_LOG("W key");
+            angleX += 1;
             break;
         }
         case 'A':
         {
-            DBG_LOG("A key");
+            angleY -= 1;
             break;
         }
         case 'S':
         {
-            DBG_LOG("S key");
+            angleX -= 1;
             break;
         }
         case 'D':
         {
-            DBG_LOG("D key");
+            angleY += 1;
             break;
         }
     }
