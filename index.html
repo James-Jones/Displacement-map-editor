@@ -13,6 +13,10 @@
         }
     </style>
 
+<!-- js script for downloadify-->
+<script type="text/javascript" src="js/swfobject.js"></script>
+<script type="text/javascript" src="js/downloadify.min.js"></script>
+
 <!-- js script for Native Client -->
 <script type="text/javascript">
 NativeClientModule = null;  // Global application object.
@@ -142,9 +146,39 @@ function updateStatus(opt_message)
 			</form>
 
 			<br>
-			<br>
 
 			<button type="button" id="undoBtn" onclick="undo()">Undo</button>
+
+                <br>
+                    
+                <form>
+                    <p id="downloadify">
+                        You must have Flash 10 installed to download this file.
+                    </p>
+                </form>
+
+                <script type="text/javascript">
+                    exampleImage = "blah"
+                    function InitImageSaving(){
+                    Downloadify.create('downloadify',{
+                    filename: function(){
+                    return "displacementmap.jpeg"
+                    },
+                    data: function(){
+                    return exampleImage;
+                    },
+                    onComplete: function(){ },
+                    onCancel: function(){ },
+                    onError: function(){ alert('Failed to save file'); },
+                    swf: 'media/downloadify.swf',
+                    downloadImage: 'images/download.png',
+                    width: 100,
+                    height: 30,
+                    transparent: true,
+                    append: false
+                    });
+                    }
+                </script>
 		</td>
 	</tr>
 </table>
@@ -175,6 +209,7 @@ function init()
     baseHeightChanged(BaseHeight);
     brushHeightChanged(BrushHeight);
     brushSizeChanged(brushSize);
+    InitImageSaving();
 }
 
 function baseHeightChanged(newValue)
