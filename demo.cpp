@@ -34,6 +34,8 @@ static PPB_OpenGLES2* gl = 0;
 //Linked shaders
 GLuint GLProgram;
 
+int iHighlightEnabled = 0;
+
 //Vertex input locations
 const uint32_t VA_POSITION_INDEX = 0; //VA=Vertex array
 const uint32_t VA_TEXCOORD_INDEX = 1;
@@ -389,6 +391,8 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
         GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
 
+        gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), iHighlightEnabled);
+
         gl->GenTextures(context, 1, &uiDisplacementMapTexture);
 
         gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
@@ -477,6 +481,8 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
     gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
     gl->UseProgram(context, GLProgram);
 
+    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), iHighlightEnabled);
+
     DrawJSONMesh(&jsonMeshTransform, jsonVtxCount, jsonIdxCount, jsonVBO, jsonIBO);
 }
 
@@ -546,10 +552,12 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         gl->UseProgram(context, GLProgram);
         if(nextStr[4] == '1')
         {
+            iHighlightEnabled = 1;
             gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 1);
         }
         else
         {
+            iHighlightEnabled = 0;
             gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 0);
         }
     }
