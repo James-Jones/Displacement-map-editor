@@ -6,6 +6,6 @@ const char* psz_textured_ps = {
 	void main()\
 	{\
         lowp vec4 BaseColor = texture2D(TextureBase, UVBase); \
-		gl_FragColor = BaseColor;\
+		gl_FragColor = BaseColor * PrimColor;\
 	}\
 "};

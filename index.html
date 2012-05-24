@@ -145,6 +145,13 @@ function updateStatus(opt_message)
 				<input type="radio" name="brushType" value="Rect brush" onchange="brushTypeChanged(this.value)"/>Rect brush<br />
 			</form>
 
+                <br>
+
+                <form>
+                    <input type="checkbox" name="highlight" checked="unchecked" defaultchecked="unchecked" onchange="highlightChanged(this.checked)"/>Highlight displaced pixels<br />
+                </form>
+                
+
 			<br>
 
 			<button type="button" id="undoBtn" onclick="undo()">Undo</button>
@@ -248,7 +255,7 @@ function sendImageToNativeClient()
 {
     if(NativeClientModule != null)
     {
-	    var msg = '';//imgData.data.toString();
+	    var msg = 'TEX';//imgData.data.toString();
     	
 	    //var imageData = ctx.getImageData(0, 0, 500, 500),
         var data = imgData.data;
@@ -344,6 +351,26 @@ function undo()
 	ctx.putImageData(imgData,0,0);
 	//Only 1 action can be undone at the moment.
 	document.getElementById("undoBtn").disabled="disabled";
+}
+
+function highlightChanged(checked)
+{
+    if(checked)
+    {
+        if(NativeClientModule != null)
+        {
+            //var msg = "HIGH1";
+            NativeClientModule.postMessage("HIGH1");
+        }
+    }
+    else
+    {
+        if(NativeClientModule != null)
+        {
+            //var msg = "HIGH0";
+            NativeClientModule.postMessage("HIGH0");
+        }
+    }
 }
 
 </script>

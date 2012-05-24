@@ -517,7 +517,12 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         dispCoeff = atof(nextStr);
     }
     else
+    if((ui32StrLength > 3) &&
+        (nextStr[0] == 'T') && 
+        (nextStr[1] == 'E') &&
+        (nextStr[2] == 'X') )
     {
+        nextStr += 3;
         //Convert space delimited string of texels to integer values
         nextStr = strtok(nextStr, " ");
         while((nextStr != 0) && (i < ui32StrLength))
@@ -530,6 +535,23 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
 
         gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
         gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+    }
+    else
+    if((ui32StrLength == 5) &&
+        (nextStr[0] == 'H') && 
+        (nextStr[1] == 'I') &&
+        (nextStr[2] == 'G') &&
+        (nextStr[3] == 'H'))
+    {
+        gl->UseProgram(context, GLProgram);
+        if(nextStr[4] == '1')
+        {
+            gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 1);
+        }
+        else
+        {
+            gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 0);
+        }
     }
 }
 
