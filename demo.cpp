@@ -92,12 +92,14 @@ GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, con
 
 	if(!status)
 	{
-		char log[256];
-		DBG_LOG("Failed to vertex compile shader\n");
+        char aszMessage[300];
+		char aszShaderLog[256];
 
-		gl->GetShaderInfoLog(context, shaders[0], 256, 0, log);
+		gl->GetShaderInfoLog(context, shaders[0], 256, 0, aszShaderLog);
 
-		DBG_LOG(log);
+        sprintf(aszMessage, DBG_LOG_PREFIX"Failed to vertex compile shader\n%s\n", aszShaderLog);
+
+		DBG_LOG(aszMessage);
 	}
 
 	shaders[1] = gl->CreateShader(context, GL_FRAGMENT_SHADER);
@@ -107,12 +109,14 @@ GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, con
 
 	if(!status)
 	{
-		char log[256];
-		DBG_LOG("Failed to pixel compile shader\n");
+        char aszMessage[300];
+		char aszShaderLog[256];
 
-		gl->GetShaderInfoLog(context, shaders[1], 256, 0, log);
+		gl->GetShaderInfoLog(context, shaders[1], 256, 0, aszShaderLog);
 
-		DBG_LOG(log);
+        sprintf(aszMessage, DBG_LOG_PREFIX"Failed to pixel compile shader\n%s\n", aszShaderLog);
+
+		DBG_LOG(aszMessage);
 	}
 
 	program = gl->CreateProgram(context);
@@ -128,7 +132,7 @@ GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, con
 
 	if(!status)
 	{
-		DBG_LOG("Failed to link program\n");
+		DBG_LOG(DBG_LOG_PREFIX"Failed to link program\n");
 	}
 
 	return program;
@@ -164,7 +168,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
 
     if(!psRoot)
     {
-        DBG_LOG("No root JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No root JSON");
         return;
     }
 
@@ -172,7 +176,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
 
     if(!psIndices)
     {
-        DBG_LOG("No indices JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No indices JSON");
         cJSON_Delete(psRoot);
         return;
     }
@@ -180,7 +184,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     psVertices = cJSON_GetObjectItem(psRoot,"vtxpos");
     if(!psVertices)
     {
-        DBG_LOG("No vertices JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No vertices JSON");
         cJSON_Delete(psRoot);
         return;
     }
@@ -188,7 +192,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     psTexCoords = cJSON_GetObjectItem(psRoot,"texcoord");
     if(!psTexCoords)
     {
-        DBG_LOG("No texcoords JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No texcoords JSON");
         cJSON_Delete(psRoot);
         return;
     }
@@ -196,7 +200,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     psNormals = cJSON_GetObjectItem(psRoot,"normal");
     if(!psNormals)
     {
-        DBG_LOG("No normals JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No normals JSON");
         cJSON_Delete(psRoot);
         return;
     }
@@ -204,7 +208,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     psBoundingBox = cJSON_GetObjectItem(psRoot, "bndbox");
     if(!psBoundingBox)
     {
-        DBG_LOG("No no bndbox JSON");
+        DBG_LOG(DBG_LOG_PREFIX"No no bndbox JSON");
         cJSON_Delete(psRoot);
         return;
     }
@@ -362,11 +366,11 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
     const float aspectRatio = (float)width / (float)height;
     const float fieldOfView = 45.0f;
 
-        unsigned char* jpeg = 0;
-        int jpegWidth = 0;
-        int jpegHeight = 0;
-        int iNumComponents = 0;
-        GLenum eFormat;
+    unsigned char* jpeg = 0;
+    int jpegWidth = 0;
+    int jpegHeight = 0;
+    int iNumComponents = 0;
+    GLenum eFormat;
 
     gl = inGL;
     context = inContext;
@@ -389,66 +393,57 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
     }
 
-        GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
+    GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
 
-        gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), iHighlightEnabled);
+    gl->GenTextures(context, 1, &uiDisplacementMapTexture);
 
-        gl->GenTextures(context, 1, &uiDisplacementMapTexture);
+    gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
 
-        gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+    gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
 
-        gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->GenTextures(context, 1, &uiMeshBaseTexture);
 
+    gl->BindTexture(context, GL_TEXTURE_2D, uiMeshBaseTexture);
 
+    jpeg = jpgd::decompress_jpeg_image_from_memory(psz_checkerboard_jpg, sizeof(psz_checkerboard_jpg), 
+                                   &jpegWidth, &jpegHeight, &iNumComponents, 3);
 
-        gl->GenTextures(context, 1, &uiMeshBaseTexture);
+    if(!jpeg)
+    {
+        DBG_LOG(DBG_LOG_PREFIX"Bad jpeg texture");
+    }
 
-        gl->BindTexture(context, GL_TEXTURE_2D, uiMeshBaseTexture);
+    switch(iNumComponents)
+    {
+    case 3:
+        eFormat = GL_RGB;
+        break;
+    case 4:
+        eFormat = GL_RGBA;
+        break;
+    default:
+        eFormat = GL_LUMINANCE;
+        break;
+    }
 
-// Loads a JPEG image from a memory buffer.
-  // req_comps can be 1 (grayscale), 3 (RGB), or 4 (RGBA).
-  // On return, width/height will be set to the image's dimensions, and actual_comps will be set 
-  // to either 1 (grayscale) or 3 (RGB).
-        jpeg = jpgd::decompress_jpeg_image_from_memory(psz_checkerboard_jpg, sizeof(psz_checkerboard_jpg), 
-                                       &jpegWidth, &jpegHeight, &iNumComponents, 3);
+    gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
 
-        if(!jpeg)
-        {
-            DBG_LOG("Bad jpeg texture");
-        }
-
-        switch(iNumComponents)
-        {
-        case 3:
-            eFormat = GL_RGB;
-            break;
-        case 4:
-            eFormat = GL_RGBA;
-            break;
-        default:
-            eFormat = GL_LUMINANCE;
-            break;
-        }
-
-        gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
-
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 
-        Identity(jsonMeshTransform.camera);
-        LookAt(jsonMeshTransform.camera,
-            0.f,0.f,3.f,
-            0.f,0.f,-5.f,
-            0.f,1.f,0.f);
+    Identity(jsonMeshTransform.camera);
+    LookAt(jsonMeshTransform.camera,
+        0.f,0.f,3.f,
+        0.f,0.f,-5.f,
+        0.f,1.f,0.f);
 
-        LoadJSONMesh(psz_cube_json, &jsonMeshTransform, &jsonIdxCount, &jsonVtxCount, &jsonVBO, &jsonIBO);
+    LoadJSONMesh(psz_cube_json, &jsonMeshTransform, &jsonIdxCount, &jsonVtxCount, &jsonVBO, &jsonIBO);
 
-        //gl->FrontFace(context, GL_CW);
-        gl->Enable(context, GL_CULL_FACE);
+    gl->Enable(context, GL_CULL_FACE);
 }
 
 void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
@@ -489,46 +484,31 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 void DemoUpdate()
 {
 }
-#if 0
-void SendJPEGImage(int iImageSize, int iWidth, int iHeight, int iChannelCount, void* pvInImage)
-{
-  // Writes JPEG image to memory buffer. 
-  // On entry, buf_size is the size of the output buffer pointed at by pBuf, which should be at least ~1024 bytes. 
-  // If return value is true, buf_size will be set to the size of the compressed data.
-  bool compress_image_to_jpeg_file_in_memory(void *pBuf, int &buf_size, int width, int height, int num_channels, const uint8 *pImage_data, const params &comp_params = params());
- 
-    void* pvOutImage = malloc(max(srcSize, 1024));
 
-    jpge::compress_image_to_jpeg_file_in_memory(pvOutImage, &iImageSize, iWidth, iHeight, iChannelCount, pvInImage);
-}
-#endif
 void DemoHandleString(const char* str, const uint32_t ui32StrLength)
 {
     uint32_t i = 0;
     char* nextStr = (char*)str;
 
-    //Check for DISPCOEFF
-    if( (ui32StrLength > 9) &&
+    if( (ui32StrLength > 5) &&
         (nextStr[0] == 'D') && 
-        (nextStr[1] == 'I') &&
-        (nextStr[2] == 'S') &&
-        (nextStr[3] == 'P') &&
-        (nextStr[4] == 'C') &&
-        (nextStr[5] == 'O') &&
-        (nextStr[6] == 'E') &&
-        (nextStr[7] == 'F') &&
-        (nextStr[8] == 'F'))
+        (nextStr[1] == 'C') &&
+        (nextStr[2] == 'O') &&
+        (nextStr[3] == 'E') &&
+        (nextStr[4] == 'F'))
     {
-        nextStr += 9;
+        nextStr += 5;
         dispCoeff = atof(nextStr);
     }
     else
-    if((ui32StrLength > 3) &&
+    if((ui32StrLength > 5) &&
         (nextStr[0] == 'T') && 
         (nextStr[1] == 'E') &&
-        (nextStr[2] == 'X') )
+        (nextStr[2] == 'X') &&
+        (nextStr[3] == 'T') &&
+        (nextStr[4] == 'U'))
     {
-        nextStr += 3;
+        nextStr += 5;
         //Convert space delimited string of texels to integer values
         nextStr = strtok(nextStr, " ");
         while((nextStr != 0) && (i < ui32StrLength))
@@ -553,17 +533,15 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         if(nextStr[4] == '1')
         {
             iHighlightEnabled = 1;
-            gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 1);
         }
         else
         {
             iHighlightEnabled = 0;
-            gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), 0);
         }
     }
 }
 
-void DemoHandleKey(uint32_t ui32KeyCode)
+void DemoHandleKeyDown(uint32_t ui32KeyCode)
 {
     switch(ui32KeyCode)
     {
@@ -588,6 +566,10 @@ void DemoHandleKey(uint32_t ui32KeyCode)
             break;
         }
     }
+}
+
+void DemoHandleKeyUp(uint32_t ui32KeyCode)
+{
 }
 
 void DemoEnd()

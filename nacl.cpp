@@ -41,26 +41,24 @@ int32_t pluginHeight;
 PP_Instance myInstance;
 static PP_Resource context;
 
-#ifdef DEBUG_MESSAGES
-	/**
-	 * Creates new string PP_Var from C string. The resulting object will be a
-	 * refcounted string object. It will be AddRef()ed for the caller. When the
-	 * caller is done with it, it should be Release()d.
-	 * @param[in] str C string to be converted to PP_Var
-	 * @return PP_Var containing string.
-	 */
-	static struct PP_Var CStrToVar(const char* str) {
-	  if (ppb_var_interface != NULL) {
-		return ppb_var_interface->VarFromUtf8(str, strlen(str));
-	  }
-	  return PP_MakeUndefined();
-	}
+/**
+ * Creates new string PP_Var from C string. The resulting object will be a
+ * refcounted string object. It will be AddRef()ed for the caller. When the
+ * caller is done with it, it should be Release()d.
+ * @param[in] str C string to be converted to PP_Var
+ * @return PP_Var containing string.
+ */
+static struct PP_Var CStrToVar(const char* str) {
+  if (ppb_var_interface != NULL) {
+	return ppb_var_interface->VarFromUtf8(str, strlen(str));
+  }
+  return PP_MakeUndefined();
+}
 
-	void PrintDebugMesg(const char* str)
-	{
-		ppb_messaging_interface->PostMessage(myInstance, CStrToVar(str));
-	}
-#endif
+void SendString(const char* str)
+{
+	ppb_messaging_interface->PostMessage(myInstance, CStrToVar(str));
+}
 
 void SendInteger(int val)
 {
@@ -314,7 +312,14 @@ PP_Bool InputEvent_HandleEvent(PP_Instance instance_id, PP_Resource input_event)
     {
         ui32KeyCode = psKeyboard->GetKeyCode(input_event);
 
-        DemoHandleKey(ui32KeyCode);
+        DemoHandleKeyDown(ui32KeyCode);
+    }
+    else
+    if(eInputEventType == PP_INPUTEVENT_TYPE_KEYUP)
+    {
+        ui32KeyCode = psKeyboard->GetKeyCode(input_event);
+
+        DemoHandleKeyUp(ui32KeyCode);
     }
 
     return PP_TRUE;

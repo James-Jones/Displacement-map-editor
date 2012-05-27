@@ -27,11 +27,15 @@ function handleMessage(message_event)
 {
 	if(typeof message_event.data == "string")
 	{
-		console.log(message_event.data);
-	}
-	else
-	{
-	}
+        if(	message_event.data.charAt(0) == 'D' &&
+			message_event.data.charAt(1) == 'B' &&
+			message_event.data.charAt(2) == 'G'&&
+			message_event.data.charAt(3) == ':' &&
+			message_event.data.charAt(4) == ' ')
+		{
+			console.log(message_event.data);
+		}
+    }
 }
 
 // Indicate success when the NaCl module has loaded.
@@ -71,11 +75,13 @@ function updateStatus(opt_message)
 	{
 		statusText = opt_message;
 	}
+	
 	var statusField = document.getElementById('statusField');
+	
 	if (statusField)
 	{
 		statusField.innerHTML = statusText;
-
+		
 		if(statusText == 'SUCCESS')
 		{
 			statusField.style.visibility="hidden";
@@ -138,54 +144,49 @@ function updateStatus(opt_message)
             <span id="dispCoeff">0</span>
 
             <br>
-            <br>
-                    
-			<form>
-				<input type="radio" name="brushType" value="Point brush" checked="checked" onchange="brushTypeChanged(this.value)"/>Point brush<br />
-				<input type="radio" name="brushType" value="Rect brush" onchange="brushTypeChanged(this.value)"/>Rect brush<br />
-			</form>
-
-                <br>
-
-                <form>
-                    <input type="checkbox" name="highlight" onchange="highlightChanged(this.checked)"/>Highlight displaced pixels<br />
-                </form>
-                
-
 			<br>
 
-			<button type="button" id="undoBtn" onclick="undo()">Undo</button>
+			<form>
+				<input type="checkbox" name="highlight" onchange="highlightChanged(this.checked)"/>Highlight displaced pixels<br />
+			</form>
 
-                <br>
-                    
-                <form>
-                    <p id="downloadify">
-                        You must have Flash 10 installed to download this file.
-                    </p>
-                </form>
+			<br>
+				
+			<form>
+				<p id="downloadify">
+					You must have Flash 10 installed to download this file.
+				</p>
+			</form>
 
-                <script type="text/javascript">
-                    exampleImage = "blah"
-                    function InitImageSaving(){
-                    Downloadify.create('downloadify',{
-                    filename: function(){
-                    return "displacementmap.jpeg"
-                    },
-                    data: function(){
-                    return exampleImage;
-                    },
-                    onComplete: function(){ },
-                    onCancel: function(){ },
-                    onError: function(){ alert('Failed to save file'); },
-                    swf: 'media/downloadify.swf',
-                    downloadImage: 'images/download.png',
-                    width: 100,
-                    height: 30,
-                    transparent: true,
-                    append: false
-                    });
-                    }
-                </script>
+			<script type="text/javascript">
+
+				function InitImageSaving()
+				{
+					Downloadify.create('downloadify',
+					{
+						filename: function()
+						{
+							return "displacementmap.png"
+						},
+						
+						data: function()
+						{
+							var dataURL = gCanvas.toDataURL();
+							return dataURL.replace(/^data:image\/(png|jpg);base64,/, "");
+						},
+						onComplete: function(){ },
+						onCancel: function(){ },
+						onError: function(){ alert('Failed to save file'); },
+						swf: 'media/downloadify.swf',
+						downloadImage: 'images/download.png',
+						width: 100,
+						height: 30,
+						transparent: true,
+						append: false,
+						dataType: "base64"
+					});
+				}
+            </script>
 		</td>
 	</tr>
 </table>
@@ -198,9 +199,6 @@ var brushSize = 4;
 
 var gCanvas=document.getElementById("myCanvas");
 var ctx=gCanvas.getContext("2d");
-
-var currentBrushType = "Point brush";
-var previousBrushType = "Point brush";
 
 var imgData;
 
@@ -233,7 +231,6 @@ function brushHeightChanged(newValue)
 	BrushHeight = newValue;
 }
 
-
 function brushSizeChanged(newValue)
 {
 	document.getElementById("brushSizeRange").innerHTML=newValue;
@@ -246,7 +243,7 @@ function sendDispCoeffToNativeClient(val)
     document.getElementById("dispCoeff").innerHTML=fval.toFixed(4)
     if(NativeClientModule != null)
     {
-        var msg = "DISPCOEFF" + val.toString();
+        var msg = "DCOEF" + val.toString();
         NativeClientModule.postMessage(msg);
     }
 }
@@ -255,9 +252,8 @@ function sendImageToNativeClient()
 {
     if(NativeClientModule != null)
     {
-	    var msg = 'TEX';//imgData.data.toString();
+	    var msg = 'TEXTU';
     	
-	    //var imageData = ctx.getImageData(0, 0, 500, 500),
         var data = imgData.data;
         var len = data.length;
 
@@ -271,32 +267,36 @@ function sendImageToNativeClient()
     }
 }
 
+resetLineStartPos = true;
+
 function canvasApplyBrush(event)
 {
     event = event || window.event;
     
-    gCanvas=document.getElementById("myCanvas");
-    
     x = event.offsetX;
     y = event.offsetY;
+    
+    if(resetLineStartPos)
+    {
+        lastX = x;
+        lastY = y;
+        resetLineStartPos = false;
+    }
     
     TotalHeight = BrushHeight;
 	
 	storeImage();
-    
-    if(currentBrushType == "Point brush")
-    {
-        ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
-        ctx.fillRect(x-(brushSize/2),y-(brushSize/2),brushSize,brushSize);
-    }
-    else
-    if(currentBrushType == "Rect brush")
-    {
-		ctx.fillStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
-        ctx.fillRect(x-(brushSize/2),y-(brushSize/2),brushSize,brushSize);
-        ctx.lineTo(x, y);
-    }
-	
+
+    ctx.strokeStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
+    ctx.lineWidth = brushSize;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+
+    lastX = x;
+    lastY = y;
+
 	sendImageToNativeClient();
 }
 
@@ -311,46 +311,19 @@ function canvasMouseMove(event)
 function canvasMouseDown(event)
 {
 	mouseDown = true;
+    resetLineStartPos = true;
 	canvasApplyBrush(event);
 }
 
 function canvasMouseUp(event)
 {
 	mouseDown = false;
+    resetLineStartPos = true;
 	canvasApplyBrush(event);
 }
-
-function brushTypeChanged(newType)
-{
-	storeImage();
-	
-	previousBrushType = currentBrushType;
-    currentBrushType = newType;
-    
-    if(previousBrushType == "Rect brush")
-    {
-        ctx.fill();
-    }
-    
-    if(newType == "Rect brush")
-    {
-        ctx.strokeStyle="orange";
-        ctx.beginPath();
-    }
-}
-
 function storeImage()
 {
 	imgData=ctx.getImageData(0,0,256,256);
-	//A new action can be undone.
-	document.getElementById("undoBtn").disabled="";
-}
-
-function undo()
-{
-	ctx.putImageData(imgData,0,0);
-	//Only 1 action can be undone at the moment.
-	document.getElementById("undoBtn").disabled="disabled";
 }
 
 function highlightChanged(checked)
@@ -359,7 +332,6 @@ function highlightChanged(checked)
     {
         if(NativeClientModule != null)
         {
-            //var msg = "HIGH1";
             NativeClientModule.postMessage("HIGH1");
         }
     }
@@ -367,7 +339,6 @@ function highlightChanged(checked)
     {
         if(NativeClientModule != null)
         {
-            //var msg = "HIGH0";
             NativeClientModule.postMessage("HIGH0");
         }
     }
