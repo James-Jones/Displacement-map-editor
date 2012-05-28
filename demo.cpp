@@ -64,8 +64,7 @@ int jsonIdxCount;
 int jsonVtxCount;
 Transformations jsonMeshTransform;
 
-float dispCoeff = 0;
-
+float dispCoeff = 0.5;
 
 uint64_t GetElapsedTimeMS()
 {
