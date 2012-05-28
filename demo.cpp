@@ -13,7 +13,6 @@
 
 #include <cstdlib>
 #include <cctype>
-#include <memory.h>
 #include <cstdio>
 #include <sys/time.h>
 
@@ -380,9 +379,14 @@ void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
 
     if(!textureImage) //First time init has been called
     {
+        int i;
+
         textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
 
-        memset(textureImage, 0, (iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+        for(i=0; i<(iDispMapWidth*iDispMapHeight); ++i)
+        {
+            textureImage[i] = 0;
+        }
 
         gettimeofday(&startTime, NULL);
 
@@ -451,7 +455,7 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
     float rotX[4][4];
 
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
-    uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
+    //uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
 
     gl->ClearColor(context, 0.5, 0.5, 0.5, 1.0f);
     gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
