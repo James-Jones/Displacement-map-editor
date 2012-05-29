@@ -47,6 +47,8 @@ uint64_t ui64BaseTimeMS;
 //Transform
 float angleY;
 float angleX;
+float fAngleModX = 0;
+float fAngleModY = 0;
 typedef struct
 {
     float projection[4][4];
@@ -455,7 +457,7 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
     float rotX[4][4];
 
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
-    //uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
+    uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
 
     gl->ClearColor(context, 0.5, 0.5, 0.5, 1.0f);
     gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -469,6 +471,9 @@ void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
 
     Identity(rotX);
     Identity(rotY);
+
+    angleY += fAngleModY * ui64DeltaTimeMS;
+    angleX += fAngleModX * ui64DeltaTimeMS;
 
     Rotate(rotY, 0.f,1.f,0.f, angleY);
 
@@ -550,22 +555,22 @@ void DemoHandleKeyDown(uint32_t ui32KeyCode)
     {
         case 'W':
         {
-            angleX += 1;
+            fAngleModX = 0.03f;//30 degrees per second
             break;
         }
         case 'A':
         {
-            angleY -= 1;
+            fAngleModY = -0.03f;
             break;
         }
         case 'S':
         {
-            angleX -= 1;
+            fAngleModX = -0.03f;
             break;
         }
         case 'D':
         {
-            angleY += 1;
+            fAngleModY = 0.03f;
             break;
         }
     }
@@ -573,6 +578,29 @@ void DemoHandleKeyDown(uint32_t ui32KeyCode)
 
 void DemoHandleKeyUp(uint32_t ui32KeyCode)
 {
+    switch(ui32KeyCode)
+    {
+        case 'W':
+        {
+            fAngleModX = 0;
+            break;
+        }
+        case 'A':
+        {
+            fAngleModY = 0;
+            break;
+        }
+        case 'S':
+        {
+            fAngleModX = 0;
+            break;
+        }
+        case 'D':
+        {
+            fAngleModY = 0;
+            break;
+        }
+    }
 }
 
 void DemoEnd()
