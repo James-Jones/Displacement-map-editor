@@ -2,6 +2,7 @@
 
 <head>
 	<title>Displacement map editor</title>
+	<link rel="icon" href="images/DMapFavicon.ico"/>
     <style type="text/css">
         html, body {
         margin-left: 0px;
@@ -187,6 +188,8 @@ function updateStatus(opt_message)
 					});
 				}
             </script>
+			
+			Load displacement map: <input type="file" id="DMapFileSelect" name="DMapFileSelect[]" accept="image/png" onchange="loadDMap"></input>
 		</td>
 	</tr>
 </table>
@@ -284,8 +287,6 @@ function canvasApplyBrush(event)
     }
     
     TotalHeight = BrushHeight;
-	
-	storeImage();
 
     ctx.strokeStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
     ctx.lineWidth = brushSize;
@@ -297,6 +298,7 @@ function canvasApplyBrush(event)
     lastX = x;
     lastY = y;
 
+	storeImage();
 	sendImageToNativeClient();
 }
 
@@ -343,6 +345,37 @@ function highlightChanged(checked)
         }
     }
 }
+
+function DMapLoaded(e)
+{
+	//Get the Base64 representation
+	var loadedimg = e.target.result;
+
+	var img = new Image(); 
+
+	img.onload = function()
+	{
+		ctx.drawImage(img,0,0);
+		storeImage();
+		sendImageToNativeClient();
+	}
+
+	img.src = loadedimg;
+}
+function loadDMap(evt)
+{
+	var files = evt.target.files; //FileList object
+	var f = files[0];
+	
+	if(f)
+	{
+		var reader = new FileReader();
+		reader.onload = DMapLoaded;
+		reader.readAsDataURL(f);
+	}
+}
+
+document.getElementById('DMapFileSelect').addEventListener('change', loadDMap, false);
 
 </script>
 
