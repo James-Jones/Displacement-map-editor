@@ -2,6 +2,9 @@
 A displacment map editor built on HTML5, javascript and chrome native client.
 
 How to build:
+  SDK install guide and download link: https://developers.google.com/native-client/sdk/download
+  Tested with pepper_18
+  Be sure to set NACL_SDK_ROOT=c:\dev\nacl_sdk\pepper_18
   cd into the NaCL\template directory
   make PATH-TO-SDK-PEPPER-DIR (e.g make e:\nacl_sdk\pepper_18)
 How to run
