@@ -2,44 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ppapi/c/pp_errors.h"
-#include "ppapi/c/pp_module.h"
-#include "ppapi/c/pp_var.h"
-#include "ppapi/c/ppb.h"
-#include "ppapi/c/ppb_instance.h"
-#include "ppapi/c/ppb_messaging.h"
-#include "ppapi/c/ppb_var.h"
-#include "ppapi/c/ppp.h"
-#include "ppapi/c/ppp_instance.h"
-#include "ppapi/c/ppp_messaging.h"
-#include "ppapi/c/ppp_input_event.h"
-#include "ppapi/c/ppb_input_event.h"
+#include "naclcontext.h"
 
-#include "ppapi/c/ppb_core.h"
-#include "ppapi/c/ppb_view.h"
-#include "ppapi/c/pp_completion_callback.h"
-
-#include "ppapi/c/pp_graphics_3d.h"
-#include "ppapi/c/ppb_graphics_3d.h"
-#include "ppapi/c/ppp_graphics_3d.h"
-
+#include "naclfile.h"
 #include "demo.h"
 
-static PPB_Messaging* ppb_messaging_interface = NULL;
-static PPB_Var* ppb_var_interface = NULL;
-static PPB_OpenGLES2* gl = NULL;
-static PPB_Graphics3D* g3d = NULL;
-static PPB_Instance* inst = NULL;
-static PPB_View* view = NULL;
-static PPB_Core* core = NULL;
-static PPB_Var* var = NULL;
-static PPB_InputEvent* psInputEventInterface = NULL;
-static PPB_KeyboardInputEvent* psKeyboard = NULL;
+NaCLContext* psNaCLContext = NULL;
 
-int32_t pluginWidth;
-int32_t pluginHeight;
-PP_Instance myInstance;
-static PP_Resource context;
 
 /**
  * Creates new string PP_Var from C string. The resulting object will be a
@@ -49,33 +18,33 @@ static PP_Resource context;
  * @return PP_Var containing string.
  */
 static struct PP_Var CStrToVar(const char* str) {
-  if (ppb_var_interface != NULL) {
-	return ppb_var_interface->VarFromUtf8(str, strlen(str));
+  if (psNaCLContext->psVarInterface != NULL) {
+	return psNaCLContext->psVarInterface->VarFromUtf8(str, strlen(str));
   }
   return PP_MakeUndefined();
 }
 
 void SendString(const char* str)
 {
-	ppb_messaging_interface->PostMessage(myInstance, CStrToVar(str));
+	psNaCLContext->psMessagingInterface->PostMessage(psNaCLContext->hModule, CStrToVar(str));
 }
 
 void SendInteger(int val)
 {
-    ppb_messaging_interface->PostMessage(myInstance, PP_MakeInt32(val));
+    psNaCLContext->psMessagingInterface->PostMessage(psNaCLContext->hModule, PP_MakeInt32(val));
 }
 
 void DrawFrame(void* user_data, int32_t result)
 {
 	PP_CompletionCallback swapBuffersCallback;
 
-	DemoRender(context, gl);
+	DemoRender(psNaCLContext);
 
 	swapBuffersCallback.func = DrawFrame;
 	swapBuffersCallback.user_data = 0;
 	swapBuffersCallback.flags = PP_COMPLETIONCALLBACK_FLAG_NONE;
 
-	g3d->SwapBuffers(context, swapBuffersCallback);
+	psNaCLContext->psG3D->SwapBuffers(psNaCLContext->hRenderContext, swapBuffersCallback);
 }
 
 void InitGL(void* user_data, int32_t result)
@@ -89,28 +58,28 @@ void InitGL(void* user_data, int32_t result)
 	PP_GRAPHICS3DATTRIB_STENCIL_SIZE, 0,
 	PP_GRAPHICS3DATTRIB_SAMPLES, 4,
 	PP_GRAPHICS3DATTRIB_SAMPLE_BUFFERS, 1,
-	PP_GRAPHICS3DATTRIB_WIDTH, pluginWidth,
-	PP_GRAPHICS3DATTRIB_HEIGHT, pluginHeight,
+	PP_GRAPHICS3DATTRIB_WIDTH, psNaCLContext->i32PluginWidth,
+	PP_GRAPHICS3DATTRIB_HEIGHT, psNaCLContext->i32PluginHeight,
 	PP_GRAPHICS3DATTRIB_NONE,
 	};
 	
 	PP_CompletionCallback swapBuffersCallback;
 
-	context = g3d->Create(myInstance, NULL, attribs);
-	inst->BindGraphics(myInstance, context);
+	psNaCLContext->hRenderContext = psNaCLContext->psG3D->Create(psNaCLContext->hModule, NULL, attribs);
+	psNaCLContext->psInstanceInterface->BindGraphics(psNaCLContext->hModule, psNaCLContext->hRenderContext);
 
-	gl->Viewport(context, 0, 0, pluginWidth, pluginHeight);
+	psNaCLContext->psGL->Viewport(psNaCLContext->hRenderContext, 0, 0, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
 
-	gl->ClearColor(context, 0.0f, 1.0f, 0.0f, 1.0f);
-	gl->Clear(context, GL_COLOR_BUFFER_BIT);
+	psNaCLContext->psGL->ClearColor(psNaCLContext->hRenderContext, 0.0f, 1.0f, 0.0f, 1.0f);
+	psNaCLContext->psGL->Clear(psNaCLContext->hRenderContext, GL_COLOR_BUFFER_BIT);
 
-	DemoInit(context, gl, pluginWidth, pluginHeight);
+	DemoInit(psNaCLContext, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
 
 	swapBuffersCallback.func = 0;
 	swapBuffersCallback.user_data = 0;
 	swapBuffersCallback.flags = PP_COMPLETIONCALLBACK_FLAG_NONE;
 
-	g3d->SwapBuffers(context, swapBuffersCallback);
+	psNaCLContext->psG3D->SwapBuffers(psNaCLContext->hRenderContext, swapBuffersCallback);
 
 	DrawFrame(0, 0);
 }
@@ -143,7 +112,7 @@ static PP_Bool Instance_DidCreate(PP_Instance instance,
                                   const char* argn[],
                                   const char* argv[])
 {
-    psInputEventInterface->RequestInputEvents(instance, PP_INPUTEVENT_CLASS_KEYBOARD | PP_INPUTEVENT_CLASS_MOUSE);
+    psNaCLContext->psInputEventInterface->RequestInputEvents(instance, PP_INPUTEVENT_CLASS_KEYBOARD | PP_INPUTEVENT_CLASS_MOUSE);
     return PP_TRUE;
 }
 
@@ -174,17 +143,17 @@ static void Instance_DidChangeView(PP_Instance instance,
                                    PP_Resource view_resource) {
 	struct PP_Rect pos;
 
-	view->GetRect(view_resource, &pos);
+	psNaCLContext->psView->GetRect(view_resource, &pos);
 
 	if (pos.size.width == 0 || pos.size.height == 0)
 	{
 		return;
 	}
 
-	pluginWidth = pos.size.width;
-	pluginHeight = pos.size.height;
+	psNaCLContext->i32PluginWidth = pos.size.width;
+	psNaCLContext->i32PluginHeight = pos.size.height;
 
-	myInstance = instance;
+	psNaCLContext->hModule = instance;
 
 	InitGL(0, 0);
 }
@@ -236,40 +205,41 @@ static PP_Bool Instance_HandleDocumentLoad(PP_Instance instance,
  * @return PP_OK on success, any other value on failure.
  */
 PP_EXPORT int32_t PPP_InitializeModule(PP_Module a_module_id,
-                                       PPB_GetInterface get_browser) {
-	PP_CompletionCallback cb;
-  ppb_messaging_interface =
+                                       PPB_GetInterface get_browser)
+{
+    psNaCLContext = (NaCLContext*)malloc(sizeof(NaCLContext));
+
+    psNaCLContext->psMessagingInterface =
       (PPB_Messaging*)(get_browser(PPB_MESSAGING_INTERFACE));
-  ppb_var_interface = (PPB_Var*)(get_browser(PPB_VAR_INTERFACE));
 
-  if(!glInitializePPAPI(get_browser))
-  {
-	  return PP_ERROR_FAILED;
-  }
+    psNaCLContext->psVarInterface = (PPB_Var*)(get_browser(PPB_VAR_INTERFACE));
 
-  gl = (PPB_OpenGLES2*)get_browser(PPB_OPENGLES2_INTERFACE);
+    if(!glInitializePPAPI(get_browser))
+    {
+      return PP_ERROR_FAILED;
+    }
 
-  g3d = (PPB_Graphics3D*)get_browser(PPB_GRAPHICS_3D_INTERFACE);
+    psNaCLContext->psGL = (PPB_OpenGLES2*)get_browser(PPB_OPENGLES2_INTERFACE);
 
-  inst = (PPB_Instance*)get_browser(PPB_INSTANCE_INTERFACE);
+    psNaCLContext->psG3D = (PPB_Graphics3D*)get_browser(PPB_GRAPHICS_3D_INTERFACE);
 
-  view = (PPB_View*)get_browser(PPB_VIEW_INTERFACE);
+    psNaCLContext->psInstanceInterface = (PPB_Instance*)get_browser(PPB_INSTANCE_INTERFACE);
 
-  core = (PPB_Core*)get_browser(PPB_CORE_INTERFACE);
+    psNaCLContext->psView = (PPB_View*)get_browser(PPB_VIEW_INTERFACE);
 
-  var = (PPB_Var*)get_browser(PPB_VAR_INTERFACE);
+    psNaCLContext->psCore = (PPB_Core*)get_browser(PPB_CORE_INTERFACE);
 
-  psInputEventInterface = (PPB_InputEvent*)get_browser(PPB_INPUT_EVENT_INTERFACE);
+    psNaCLContext->psVar = (PPB_Var*)get_browser(PPB_VAR_INTERFACE);
 
-  psKeyboard = (PPB_KeyboardInputEvent*)get_browser(PPB_KEYBOARD_INPUT_EVENT_INTERFACE);
-  
-  cb.func = 0;//FlickerAndPaint;
-  cb.user_data = 0;
-  cb.flags = PP_COMPLETIONCALLBACK_FLAG_NONE;
+    psNaCLContext->psInputEventInterface = (PPB_InputEvent*)get_browser(PPB_INPUT_EVENT_INTERFACE);
 
-  //core->CallOnMainThread(0, cb, 0);
+    psNaCLContext->psKeyboard = (PPB_KeyboardInputEvent*)get_browser(PPB_KEYBOARD_INPUT_EVENT_INTERFACE);
 
-  return PP_OK;
+    psNaCLContext->psURLRequest = (PPB_URLRequestInfo*) get_browser(PPB_URLREQUESTINFO_INTERFACE);
+
+    psNaCLContext->psURLLoader = (PPB_URLLoader*) get_browser(PPB_URLLOADER_INTERFACE);
+
+    return PP_OK;
 }
 
 void Messaging_HandleMessage(PP_Instance instance, struct PP_Var message)
@@ -281,8 +251,8 @@ void Messaging_HandleMessage(PP_Instance instance, struct PP_Var message)
     {
         case PP_VARTYPE_STRING:
         {
-            pszMessage = var->VarToUtf8(message, &ui32MessageLength);
-            DemoHandleString(pszMessage, ui32MessageLength);
+            pszMessage = psNaCLContext->psVar->VarToUtf8(message, &ui32MessageLength);
+            DemoHandleString(psNaCLContext, pszMessage, ui32MessageLength);
             break;
         }
         case PP_VARTYPE_NULL:
@@ -305,19 +275,20 @@ void Messaging_HandleMessage(PP_Instance instance, struct PP_Var message)
 PP_Bool InputEvent_HandleEvent(PP_Instance instance_id, PP_Resource input_event)
 {
     uint32_t ui32KeyCode;
+
     PP_InputEvent_Type eInputEventType = 
-        psInputEventInterface->GetType(input_event);
+        psNaCLContext->psInputEventInterface->GetType(input_event);
 
     if(eInputEventType == PP_INPUTEVENT_TYPE_KEYDOWN)
     {
-        ui32KeyCode = psKeyboard->GetKeyCode(input_event);
+        ui32KeyCode = psNaCLContext->psKeyboard->GetKeyCode(input_event);
 
         DemoHandleKeyDown(ui32KeyCode);
     }
     else
     if(eInputEventType == PP_INPUTEVENT_TYPE_KEYUP)
     {
-        ui32KeyCode = psKeyboard->GetKeyCode(input_event);
+        ui32KeyCode = psNaCLContext->psKeyboard->GetKeyCode(input_event);
 
         DemoHandleKeyUp(ui32KeyCode);
     }
@@ -332,54 +303,43 @@ PP_Bool InputEvent_HandleEvent(PP_Instance instance_id, PP_Resource input_event)
  * @param[in] interface_name name of the interface
  * @return pointer to the interface
  */
-PP_EXPORT const void* PPP_GetInterface(const char* interface_name) {
-  
-    /*if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0) {
-    static PPP_Instance instance_interface = {
-      &Instance_DidCreate,
-      &Instance_DidDestroy,
-      &Instance_DidChangeView,
-      &Instance_DidChangeFocus,
-      &Instance_HandleDocumentLoad,
+PP_EXPORT const void* PPP_GetInterface(const char* interface_name)
+{
+    static PPP_Instance instance_interface = 
+    {
+        &Instance_DidCreate,
+        &Instance_DidDestroy,
+        &Instance_DidChangeView,
+        &Instance_DidChangeFocus,
+        &Instance_HandleDocumentLoad
     };
-    return &instance_interface;
-  }*/
 
-  static PPP_Instance instance_interface = 
-  {
-    &Instance_DidCreate,
-    &Instance_DidDestroy,
-    &Instance_DidChangeView,
-    &Instance_DidChangeFocus,
-    &Instance_HandleDocumentLoad
-  };
+    static PPP_InputEvent input_event_interface = 
+    {
+        &InputEvent_HandleEvent
+    };
 
-  static PPP_InputEvent input_event_interface = 
-  {
-    &InputEvent_HandleEvent
-  };
+    static PPP_Messaging messaging_interface =
+    {
+        &Messaging_HandleMessage
+    };
 
-  static PPP_Messaging messaging_interface =
-  {
-      &Messaging_HandleMessage
-  };
+    if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0)
+    {
+        return &instance_interface;
+    }
 
-  if (strcmp(interface_name, PPP_INSTANCE_INTERFACE) == 0)
-  {
-    return &instance_interface;
-  }
+    if (strcmp(interface_name, PPP_INPUT_EVENT_INTERFACE) == 0)
+    {
+        return &input_event_interface;
+    }
 
-  if (strcmp(interface_name, PPP_INPUT_EVENT_INTERFACE) == 0)
-  {
-    return &input_event_interface;
-  }
+    if(strcmp(interface_name, PPP_MESSAGING_INTERFACE) == 0)
+    {
+        return &messaging_interface;
+    }
 
-  if(strcmp(interface_name, PPP_MESSAGING_INTERFACE) == 0)
-  {
-      return &messaging_interface;
-  }
-
-  return NULL;
+    return NULL;
 }
 
 
@@ -387,6 +347,6 @@ PP_EXPORT const void* PPP_GetInterface(const char* interface_name) {
  * Called before the plugin module is unloaded.
  */
 PP_EXPORT void PPP_ShutdownModule() {
-	DemoEnd();
-	glTerminatePPAPI();
+    DemoEnd();
+    glTerminatePPAPI();
 }

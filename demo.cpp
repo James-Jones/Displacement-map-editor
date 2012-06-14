@@ -5,50 +5,41 @@
 #include "textured_vs.h"
 #include "textured_ps.h"
 
-#include "cube_json.h"
-
 #include "jpgd.h"
-
-#include "checkerboard_jpg.h"
 
 #include <cstdlib>
 #include <cctype>
 #include <cstdio>
 #include <sys/time.h>
 
+#include "naclfile.h"
+
 #define max(a, b) ((a > b) ? (a) : (b))
-
-//Texture
-GLuint uiDisplacementMapTexture;
-GLubyte* textureImage = 0;
-const int iDispMapWidth = 256;
-const int iDispMapHeight = 256;
-
-GLuint uiMeshBaseTexture;
-
-//GL interface
-static PP_Resource context;
-static PPB_OpenGLES2* gl = 0;
-
-//Linked shaders
-GLuint GLProgram;
-
-int iHighlightEnabled = 0;
 
 //Vertex input locations
 const uint32_t VA_POSITION_INDEX = 0; //VA=Vertex array
 const uint32_t VA_TEXCOORD_INDEX = 1;
 const uint32_t VA_NORMAL_INDEX = 2;
 
-//Timer
-timeval startTime;
-uint64_t ui64BaseTimeMS;
+const int iDispMapWidth = 256;
+const int iDispMapHeight = 256;
 
-//Transform
-float angleY;
-float angleX;
-float fAngleModX = 0;
-float fAngleModY = 0;
+typedef struct DownloadContext_TAG
+{
+    int id;
+    PP_Resource hRenderContext;
+    PPB_OpenGLES2* psGL;
+    int iDownloaded;
+} DownloadContext;
+
+typedef struct Texture_TAG
+{
+    GLuint hTextureGL;
+    GLubyte* image;
+    int iWidth;
+    int iHeight;
+} Texture;
+
 typedef struct
 {
     float projection[4][4];
@@ -58,21 +49,50 @@ typedef struct
     float xform[4][4];
 } Transformations;
 
-//Mesh vertices, indices and MVP.
-GLuint jsonVBO;
-GLuint jsonIBO;
-int jsonIdxCount;
-int jsonVtxCount;
-Transformations jsonMeshTransform;
+typedef struct Mesh_TAG
+{
+    GLuint hVBO;
+    GLuint hIBO;
+    int iIdxCount;
+    int iVtxCount;
+} Mesh;
 
-float dispCoeff = 0.5;
+typedef struct DemoContext_TAG
+{
+    DownloadContext sDownloadBaseTexture;
+    DownloadContext sDownloadMesh;
+
+    Texture sDisplacementMap;
+    Texture sBaseMap;
+
+    GLuint hPassthroughShader;
+    GLuint hDisplacementMapShader;
+
+    Mesh sMesh;
+    Transformations sMeshTransform;
+
+    //Shader constants
+    int iHighlightEnabled;
+    float fDispCoeff;
+
+    timeval startTime;
+    uint64_t ui64BaseTimeMS;
+
+    float fAngleY;
+    float fAngleX;
+    float fAngleModX;
+    float fAngleModY;
+
+} DemoContext;
+
+DemoContext* psDemoContext = 0;
 
 uint64_t GetElapsedTimeMS()
 {
     timeval t;
     gettimeofday(&t, NULL);
 
-    uint64_t secs  = t.tv_sec - startTime.tv_sec;
+    uint64_t secs  = t.tv_sec - psDemoContext->startTime.tv_sec;
     uint64_t uSecs = t.tv_usec;
 
     // Make granularity 1 ms
@@ -138,7 +158,14 @@ GLuint CreateProgram(PP_Resource context, PPB_OpenGLES2* gl, const char* vs, con
 	return program;
 }
 
-void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndices, int* piNumVertices, GLuint* puiVBO, GLuint* puiIBO)
+void LoadJSONMesh(PP_Resource context,
+                  PPB_OpenGLES2* gl,
+                  const char* mesh,
+                  Transformations* psMatrices,
+                  int* piNumIndices,
+                  int* piNumVertices,
+                  GLuint* puiVBO,
+                  GLuint* puiIBO)
 {
     uint16_t* pui16Indices;
     float* pfVertices;
@@ -249,7 +276,7 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
         pfVertices[vtx] = psVertex->valuedouble;
 
         psTexC = cJSON_GetArrayItem(psTexCoords, vtx);
-        pfTexCoords[vtx] = psTexC->valuedouble;
+        pfTexCoords[vtx] = 1 - psTexC->valuedouble;
 
         psNrm = cJSON_GetArrayItem(psNormals, vtx);
         pfNormals[vtx] = psNrm->valuedouble;
@@ -318,12 +345,18 @@ void LoadJSONMesh(const char* mesh, Transformations* psMatrices, int* piNumIndic
     *piNumVertices = iNumVertices;
 }
 
-void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices, GLuint uiVBO, GLuint uiIBO)
+void DrawJSONMesh(PP_Resource context,
+                  PPB_OpenGLES2* gl,
+                  Transformations* psMatrices,
+                  int iNumVertices,
+                  int iNumIndices,
+                  GLuint uiVBO,
+                  GLuint uiIBO)
 {
     float afTransform[4][4];//The final matrix
     float modelview[4][4];
 
-    gl->UseProgram(context, GLProgram);
+    gl->UseProgram(context, psDemoContext->hDisplacementMapShader);
 
     Identity(afTransform);
 
@@ -334,17 +367,17 @@ void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices
     MultMatrix(afTransform,  modelview, psMatrices->projection);
 
 
-    gl->UniformMatrix4fv(context, gl->GetUniformLocation(context, GLProgram, "Transform"), 1, GL_FALSE, (float*)&afTransform[0][0]);
-    gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "TextureBase"), 0);
+    gl->UniformMatrix4fv(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "Transform"), 1, GL_FALSE, (float*)&afTransform[0][0]);
+    gl->Uniform1i(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "TextureBase"), 0);
 
-    gl->Uniform1i(context, gl->GetUniformLocation(context, GLProgram, "DispMap"), 1);
+    gl->Uniform1i(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "DispMap"), 1);
 
-    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "DISPLACEMENT_COEFFICIENT"), dispCoeff);
+    gl->Uniform1f(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "DISPLACEMENT_COEFFICIENT"), psDemoContext->fDispCoeff);
 
     gl->ActiveTexture(context, GL_TEXTURE0+1);
-    gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+    gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
     gl->ActiveTexture(context, GL_TEXTURE0);
-    gl->BindTexture(context, GL_TEXTURE_2D, uiMeshBaseTexture);
+    gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sBaseMap.hTextureGL);
 
     gl->BindBuffer(context, GL_ARRAY_BUFFER, uiVBO);
     gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, uiIBO);
@@ -360,143 +393,302 @@ void DrawJSONMesh(Transformations* psMatrices, int iNumVertices, int iNumIndices
     gl->DrawElements(context, GL_TRIANGLES, iNumIndices, GL_UNSIGNED_SHORT, 0);
 }
 
+std::string g_Mesh;
 
-void DemoInit(PP_Resource inContext, PPB_OpenGLES2* inGL, int width, int height)
+void MeshDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
 {
+    DownloadContext* psDownloadContext = (DownloadContext*)pvUserData;
+    //PP_Resource context = psDownloadContext->hRenderContext;
+    //PPB_OpenGLES2* gl = psDownloadContext->psGL;
+
+    //char aszMessage[256];
+
+    DBG_LOG(DBG_LOG_PREFIX"MeshDownload Start");
+
+    if(!iSuccessful)
+    {
+        DBG_LOG(DBG_LOG_PREFIX"Failed to download mesh");
+        return;
+    }
+
+    g_Mesh = fileContents;
+
+    /*LoadJSONMesh(context,
+        gl,
+        fileContents.c_str(),
+        &psDemoContext->sMeshTransform,
+        &psDemoContext->sMesh.iIdxCount,
+        &psDemoContext->sMesh.iVtxCount,
+        &psDemoContext->sMesh.hVBO,
+        &psDemoContext->sMesh.hIBO);*/
+
+    psDownloadContext->iDownloaded = 1;
+
+    //sprintf(aszMessage, DBG_LOG_PREFIX"Index count: %d Vertex count: %d\n", psDemoContext->sMesh.iIdxCount,
+      //  psDemoContext->sMesh.iVtxCount);
+    //DBG_LOG(aszMessage);
+
+    DBG_LOG(DBG_LOG_PREFIX"MeshDownload End");
+}
+
+std::string g_JPEG;
+
+void TextureDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
+{
+    DownloadContext* psDownloadContext = (DownloadContext*)pvUserData;
+    //PP_Resource context = psDownloadContext->hRenderContext;
+    //PPB_OpenGLES2* gl = psDownloadContext->psGL;
+
+    DBG_LOG(DBG_LOG_PREFIX"TextureDonwloaded Start");
+
+    if(!iSuccessful)
+    {
+        DBG_LOG(DBG_LOG_PREFIX"Failed to download texture");
+        return;
+    }
+
+    g_JPEG = fileContents;
+
+    psDownloadContext->iDownloaded = 1;
+
+    DBG_LOG(DBG_LOG_PREFIX"TextureDownloaded End");
+}
+
+void DemoInit(NaCLContext* psNaCLContext, int width, int height)
+{
+    PP_Resource context = psNaCLContext->hRenderContext;
+    PPB_OpenGLES2* gl = psNaCLContext->psGL;
+
     const float aspectRatio = (float)width / (float)height;
     const float fieldOfView = 45.0f;
 
-    unsigned char* jpeg = 0;
-    int jpegWidth = 0;
-    int jpegHeight = 0;
-    int iNumComponents = 0;
-    GLenum eFormat;
+    DBG_LOG(DBG_LOG_PREFIX"DemoInit Start");
 
-    gl = inGL;
-    context = inContext;
+    if(!psDemoContext)
+    {
+        psDemoContext = (DemoContext*)calloc(1, sizeof(DemoContext));
 
-    Identity(jsonMeshTransform.projection);
-    Persp(jsonMeshTransform.projection, fieldOfView, aspectRatio,
+        //Start the async downloads early.
+
+        DownloadContext* psTextureDownloadContext = &psDemoContext->sDownloadBaseTexture;//(DownloadContext*)malloc(sizeof(DownloadContext));
+        psTextureDownloadContext->id = 0;
+        psTextureDownloadContext->hRenderContext = context;
+        psTextureDownloadContext->psGL = gl;
+        psTextureDownloadContext->iDownloaded = 0;
+
+        StartDownload(psNaCLContext, "dload/checkerboard.jpg", psTextureDownloadContext, TextureDownloaded);
+
+        DownloadContext* psMeshDownloadContext = &psDemoContext->sDownloadMesh;//(DownloadContext*)malloc(sizeof(DownloadContext));
+        psMeshDownloadContext->id = 1;
+        psMeshDownloadContext->hRenderContext = context;
+        psMeshDownloadContext->psGL = gl;
+        psMeshDownloadContext->iDownloaded = 0;
+
+        StartDownload(psNaCLContext, "dload/cube.json", psMeshDownloadContext, MeshDownloaded);
+    }
+
+    Identity(psDemoContext->sMeshTransform.projection);
+    Persp(psDemoContext->sMeshTransform.projection, fieldOfView, aspectRatio,
         1.0, 1000.0);
 
-    if(!textureImage) //First time init has been called
+    if(!psDemoContext->sDisplacementMap.image) //First time init has been called
     {
         int i;
 
-        textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+        GLubyte* textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
 
         for(i=0; i<(iDispMapWidth*iDispMapHeight); ++i)
         {
             textureImage[i] = 0;
         }
 
-        gettimeofday(&startTime, NULL);
+        DBG_LOG(DBG_LOG_PREFIX"DemoInit A");
 
-        ui64BaseTimeMS = GetElapsedTimeMS();
-        angleY = 0;
-        angleX = 0;
+        psDemoContext->sDisplacementMap.image = textureImage;
 
+        gettimeofday(&psDemoContext->startTime, NULL);
+
+        psDemoContext->ui64BaseTimeMS = GetElapsedTimeMS();
+        psDemoContext->fAngleY = 0;
+        psDemoContext->fAngleX = 0;
+        //int iHighlightEnabled = 0;
+        psDemoContext->fDispCoeff = 0.5f;
+
+        DBG_LOG(DBG_LOG_PREFIX"DemoInit B");
     }
 
-    GLProgram = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
+    psDemoContext->hDisplacementMapShader = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
 
-    gl->GenTextures(context, 1, &uiDisplacementMapTexture);
+    //psDemoContext->hPassthroughShader = CreateProgram(context, gl, psz_passthrough_vs, psz_passthrough_ps);
 
-    gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
+    DBG_LOG(DBG_LOG_PREFIX"DemoInit C");
 
-    gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+    gl->GenTextures(context, 1, &psDemoContext->sDisplacementMap.hTextureGL);
+
+    gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
+
+    gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, psDemoContext->sDisplacementMap.image);
+
+    DBG_LOG(DBG_LOG_PREFIX"DemoInit D");
 
     gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-    gl->GenTextures(context, 1, &uiMeshBaseTexture);
-
-    gl->BindTexture(context, GL_TEXTURE_2D, uiMeshBaseTexture);
-
-    jpeg = jpgd::decompress_jpeg_image_from_memory(psz_checkerboard_jpg, sizeof(psz_checkerboard_jpg), 
-                                   &jpegWidth, &jpegHeight, &iNumComponents, 3);
-
-    if(!jpeg)
-    {
-        DBG_LOG(DBG_LOG_PREFIX"Bad jpeg texture");
-    }
-
-    switch(iNumComponents)
-    {
-    case 3:
-        eFormat = GL_RGB;
-        break;
-    case 4:
-        eFormat = GL_RGBA;
-        break;
-    default:
-        eFormat = GL_LUMINANCE;
-        break;
-    }
-
-    gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
-
-    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-
-    Identity(jsonMeshTransform.camera);
-    LookAt(jsonMeshTransform.camera,
+    Identity(psDemoContext->sMeshTransform.camera);
+    LookAt(psDemoContext->sMeshTransform.camera,
         0.f,0.f,3.f,
         0.f,0.f,-5.f,
         0.f,1.f,0.f);
 
-    LoadJSONMesh(psz_cube_json, &jsonMeshTransform, &jsonIdxCount, &jsonVtxCount, &jsonVBO, &jsonIBO);
-
     gl->Enable(context, GL_CULL_FACE);
+
+    DBG_LOG(DBG_LOG_PREFIX"DemoInit End");
 }
 
-void DemoRender(PP_Resource inContext, PPB_OpenGLES2* inGL)
+void DrawLoadingWheel()
 {
+    /*for(GLint i=30;i>0;--i)//build a circle with 30 line segments
+    {
+        cosine=static_cast<GLfloat>(cos(i*2*PI/30.0)*(PLAYER_WIDTH));
+        sine=static_cast<GLfloat>(sin(i*2*PI/30.0)*(PLAYER_HEIGHT));
+        
+        pfVertices[k++] = cosine;
+        pfVertices[k++] = sine;
+
+        pfColour[m++] = 1;
+        pfColour[m++] = 0;
+        pfColour[m++] = 0;
+    }*/
+}
+
+void DemoRender(NaCLContext* psNaCLContext)
+{
+    PP_Resource context = psNaCLContext->hRenderContext;
+    PPB_OpenGLES2* gl = psNaCLContext->psGL;
+
     float rotY[4][4];
     float rotX[4][4];
 
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
-    uint64_t ui64DeltaTimeMS = ui64ElapsedTime - ui64BaseTimeMS;
+    uint64_t ui64DeltaTimeMS = ui64ElapsedTime - psDemoContext->ui64BaseTimeMS;
 
-    gl->ClearColor(context, 0.5, 0.5, 0.5, 1.0f);
-    gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    //DBG_LOG(DBG_LOG_PREFIX"DemoRender Start");
 
     gl->Enable(context, GL_DEPTH_TEST);
 
-    ui64BaseTimeMS = ui64ElapsedTime;
+    psDemoContext->ui64BaseTimeMS = ui64ElapsedTime;
 
+    if(!psDemoContext->sDownloadBaseTexture.iDownloaded ||
+       !psDemoContext->sDownloadMesh.iDownloaded)
+    {
+        gl->ClearColor(context, 0.0, 0.0, 1.0, 1.0f);
+        gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        DrawLoadingWheel();
 
-    Identity(jsonMeshTransform.rot);
+        //DBG_LOG(DBG_LOG_PREFIX"DemoRender End A");
+        return;
+    }
+
+    if(psDemoContext->sDownloadMesh.iDownloaded == 1)
+    {
+        LoadJSONMesh(context,
+        gl,
+        g_Mesh.c_str(),
+        &psDemoContext->sMeshTransform,
+        &psDemoContext->sMesh.iIdxCount,
+        &psDemoContext->sMesh.iVtxCount,
+        &psDemoContext->sMesh.hVBO,
+        &psDemoContext->sMesh.hIBO);
+
+        psDemoContext->sDownloadMesh.iDownloaded = 2;
+    }
+
+    if(psDemoContext->sDownloadBaseTexture.iDownloaded == 1)
+    {
+        unsigned char* jpeg = 0;
+        int jpegWidth = 0;
+        int jpegHeight = 0;
+        int iNumComponents = 0;
+        GLenum eFormat;
+
+        gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sBaseMap.hTextureGL);
+
+        jpeg = jpgd::decompress_jpeg_image_from_memory((unsigned char*)g_JPEG.c_str(), g_JPEG.length(), 
+                                       &jpegWidth, &jpegHeight, &iNumComponents, 3);
+
+        if(!jpeg)
+        {
+            DBG_LOG(DBG_LOG_PREFIX"Bad jpeg texture");
+            return;
+        }
+
+        switch(iNumComponents)
+        {
+            case 3:
+            {
+                eFormat = GL_RGB;
+                break;
+            }
+            case 4:
+            {
+                eFormat = GL_RGBA;
+                break;
+            }
+            default:
+            {
+                eFormat = GL_LUMINANCE;
+                break;
+            }
+        }
+
+        gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
+
+        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+        psDemoContext->sDownloadBaseTexture.iDownloaded = 2;
+    }
+    gl->ClearColor(context, 0.5, 0.5, 0.5, 1.0f);
+    gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    Identity(psDemoContext->sMeshTransform.rot);
 
     Identity(rotX);
     Identity(rotY);
 
-    angleY += fAngleModY * ui64DeltaTimeMS;
-    angleX += fAngleModX * ui64DeltaTimeMS;
+    psDemoContext->fAngleY += psDemoContext->fAngleModY * ui64DeltaTimeMS;
+    psDemoContext->fAngleX += psDemoContext->fAngleModX * ui64DeltaTimeMS;
 
-    Rotate(rotY, 0.f,1.f,0.f, angleY);
+    Rotate(rotY, 0.f,1.f,0.f, psDemoContext->fAngleY);
 
-    Rotate(rotX, 1.f,0.f,0.f, angleX);
+    Rotate(rotX, 1.f,0.f,0.f, psDemoContext->fAngleX);
 
-    MultMatrix(jsonMeshTransform.rot, rotY, rotX);
+    MultMatrix(psDemoContext->sMeshTransform.rot, rotY, rotX);
 
-    gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
-    gl->UseProgram(context, GLProgram);
+    gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
+    gl->UseProgram(context, psDemoContext->hDisplacementMapShader);
 
-    gl->Uniform1f(context, gl->GetUniformLocation(context, GLProgram, "HighlightEnabled"), iHighlightEnabled);
+    gl->Uniform1f(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "HighlightEnabled"), psDemoContext->iHighlightEnabled);
 
-    DrawJSONMesh(&jsonMeshTransform, jsonVtxCount, jsonIdxCount, jsonVBO, jsonIBO);
+    DrawJSONMesh(context,
+        gl,
+        &psDemoContext->sMeshTransform,
+        psDemoContext->sMesh.iVtxCount,
+        psDemoContext->sMesh.iIdxCount,
+        psDemoContext->sMesh.hVBO,
+        psDemoContext->sMesh.hIBO);
+
+    //DBG_LOG(DBG_LOG_PREFIX"DemoRender End B");
 }
 
-void DemoUpdate()
+void DemoHandleString(NaCLContext* psNaCLContext, const char* str, const uint32_t ui32StrLength)
 {
-}
-
-void DemoHandleString(const char* str, const uint32_t ui32StrLength)
-{
-    uint32_t i = 0;
     char* nextStr = (char*)str;
+
+    if(!psDemoContext)
+    {
+        return;
+    }
 
     if( (ui32StrLength > 5) &&
         (nextStr[0] == 'D') && 
@@ -506,7 +698,7 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         (nextStr[4] == 'F'))
     {
         nextStr += 5;
-        dispCoeff = atof(nextStr);
+        psDemoContext->fDispCoeff = atof(nextStr);
     }
     else
     if((ui32StrLength > 5) &&
@@ -517,18 +709,79 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         (nextStr[4] == 'U'))
     {
         nextStr += 5;
+
+#if 1
+
+        DBG_LOG(DBG_LOG_PREFIX"Updating dmap");
+
+        uint32_t i = 0;
+
         //Convert space delimited string of texels to integer values
         nextStr = strtok(nextStr, " ");
         while((nextStr != 0) && (i < ui32StrLength))
         {
-            textureImage[i] = atoi(nextStr);
+            psDemoContext->sDisplacementMap.image[i] = atoi(nextStr);
             nextStr = strtok(0, " ");
 
             ++i;
         }
 
-        gl->BindTexture(context, GL_TEXTURE_2D, uiDisplacementMapTexture);
-        gl->TexSubImage2D(context, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, textureImage);
+        psNaCLContext->psGL->BindTexture(psNaCLContext->hRenderContext, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
+        psNaCLContext->psGL->TexSubImage2D(psNaCLContext->hRenderContext, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, psDemoContext->sDisplacementMap.image);
+#endif
+
+#if 0
+        while((i+5) < ui32StrLength)
+        {
+            psDemoContext->sDisplacementMap.image[i] = ((unsigned char*)nextStr)[i];
+            ++i;
+        }
+
+        psNaCLContext->psGL->BindTexture(psNaCLContext->hRenderContext, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
+        psNaCLContext->psGL->TexSubImage2D(psNaCLContext->hRenderContext, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, GL_LUMINANCE, GL_UNSIGNED_BYTE, psDemoContext->sDisplacementMap.image);
+#endif
+
+#if 0
+        int iWidth, iHeight, iNumComponents;
+        GLenum eFormat;
+
+        if(psDemoContext->sDisplacementMap.image)
+        {
+            free(psDemoContext->sDisplacementMap.image);
+            psDemoContext->sDisplacementMap.image = 0;
+        }
+
+        psDemoContext->sDisplacementMap.image = jpgd::decompress_jpeg_image_from_memory((unsigned char*)nextStr, ui32StrLength-5, 
+                                       &iWidth, &iHeight, &iNumComponents, 4);
+
+        if(!psDemoContext->sDisplacementMap.image)
+        {
+            DBG_LOG(DBG_LOG_PREFIX"Bad jpeg texture");
+            return;
+        }
+
+        switch(iNumComponents)
+        {
+            case 3:
+            {
+                eFormat = GL_RGB;
+                break;
+            }
+            case 4:
+            {
+                eFormat = GL_RGBA;
+                break;
+            }
+            default:
+            {
+                eFormat = GL_LUMINANCE;
+                break;
+            }
+        }
+
+        psNaCLContext->psGL->BindTexture(psNaCLContext->hRenderContext, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
+        psNaCLContext->psGL->TexSubImage2D(psNaCLContext->hRenderContext, GL_TEXTURE_2D, 0, 0, 0, iDispMapWidth, iDispMapHeight, eFormat, GL_UNSIGNED_BYTE, psDemoContext->sDisplacementMap.image);
+#endif
     }
     else
     if((ui32StrLength == 5) &&
@@ -537,14 +790,14 @@ void DemoHandleString(const char* str, const uint32_t ui32StrLength)
         (nextStr[2] == 'G') &&
         (nextStr[3] == 'H'))
     {
-        gl->UseProgram(context, GLProgram);
+        psNaCLContext->psGL->UseProgram(psNaCLContext->hRenderContext, psDemoContext->hDisplacementMapShader);
         if(nextStr[4] == '1')
         {
-            iHighlightEnabled = 1;
+            psDemoContext->iHighlightEnabled = 1;
         }
         else
         {
-            iHighlightEnabled = 0;
+            psDemoContext->iHighlightEnabled = 0;
         }
     }
 }
@@ -555,22 +808,22 @@ void DemoHandleKeyDown(uint32_t ui32KeyCode)
     {
         case 'W':
         {
-            fAngleModX = 0.03f;//30 degrees per second
+            psDemoContext->fAngleModX = 0.03f;//30 degrees per second
             break;
         }
         case 'A':
         {
-            fAngleModY = -0.03f;
+            psDemoContext->fAngleModY = -0.03f;
             break;
         }
         case 'S':
         {
-            fAngleModX = -0.03f;
+            psDemoContext->fAngleModX = -0.03f;
             break;
         }
         case 'D':
         {
-            fAngleModY = 0.03f;
+            psDemoContext->fAngleModY = 0.03f;
             break;
         }
     }
@@ -582,22 +835,22 @@ void DemoHandleKeyUp(uint32_t ui32KeyCode)
     {
         case 'W':
         {
-            fAngleModX = 0;
+            psDemoContext->fAngleModX = 0;
             break;
         }
         case 'A':
         {
-            fAngleModY = 0;
+            psDemoContext->fAngleModY = 0;
             break;
         }
         case 'S':
         {
-            fAngleModX = 0;
+            psDemoContext->fAngleModX = 0;
             break;
         }
         case 'D':
         {
-            fAngleModY = 0;
+            psDemoContext->fAngleModY = 0;
             break;
         }
     }
@@ -605,7 +858,10 @@ void DemoHandleKeyUp(uint32_t ui32KeyCode)
 
 void DemoEnd()
 {
-    free(textureImage);
-    textureImage = 0;
+    free(psDemoContext->sDisplacementMap.image);
+    psDemoContext->sDisplacementMap.image = 0;
+
+    free(psDemoContext);
+    psDemoContext = NULL;
 }
 

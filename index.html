@@ -203,8 +203,6 @@ var brushSize = 4;
 var gCanvas=document.getElementById("myCanvas");
 var ctx=gCanvas.getContext("2d");
 
-var imgData;
-
 var ctrlKeyDown = false;
 var mouseDown = false;
 
@@ -255,6 +253,7 @@ function sendImageToNativeClient()
 {
     if(NativeClientModule != null)
     {
+		var imgData=ctx.getImageData(0,0,256,256);
 	    var msg = 'TEXTU';
     	
         var data = imgData.data;
@@ -265,8 +264,24 @@ function sendImageToNativeClient()
 		    var pixelValue = data[i].toString();
 		    msg = msg.concat(pixelValue.concat(' '));
 	    }
+		
+		NativeClientModule.postMessage(msg);
+		
+		/*var dataURL = gCanvas.toDataURL("image/jpeg");
+		var msg = 'TEXTU' + atob(dataURL.replace(/^data:image\/(jpeg);base64,/, ""));
+		NativeClientModule.postMessage(msg);*/
 
-	    NativeClientModule.postMessage(msg);
+		
+		/*var imageData = ctx.getImageData(0, 0, 256, 256);
+		var byteArray = imageData.data;
+		var stringValue = "TEXTU";
+
+		for (var i = 0; i < byteArray.length; i += 4)
+		{
+			stringValue += String.fromCharCode(byteArray[i]);
+		}
+		 
+	    NativeClientModule.postMessage(stringValue);*/
     }
 }
 
@@ -285,7 +300,7 @@ function canvasApplyBrush(event)
         lastY = y;
         resetLineStartPos = false;
     }
-    
+	    
     TotalHeight = BrushHeight;
 
     ctx.strokeStyle="rgb(" + TotalHeight + ", " + TotalHeight + ", " + TotalHeight + ");";
@@ -297,9 +312,8 @@ function canvasApplyBrush(event)
 
     lastX = x;
     lastY = y;
-
-	storeImage();
-	sendImageToNativeClient();
+	
+	//sendImageToNativeClient();
 }
 
 function canvasMouseMove(event)
@@ -322,10 +336,7 @@ function canvasMouseUp(event)
 	mouseDown = false;
     resetLineStartPos = true;
 	canvasApplyBrush(event);
-}
-function storeImage()
-{
-	imgData=ctx.getImageData(0,0,256,256);
+	sendImageToNativeClient();
 }
 
 function highlightChanged(checked)
@@ -356,7 +367,6 @@ function DMapLoaded(e)
 	img.onload = function()
 	{
 		ctx.drawImage(img,0,0);
-		storeImage();
 		sendImageToNativeClient();
 	}
 
