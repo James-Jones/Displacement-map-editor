@@ -224,6 +224,8 @@ function baseHeightChanged(newValue)
 	BaseHeight = newValue;
     ctx.fillStyle= "rgb(" + BaseHeight + ", " + BaseHeight + ", " + BaseHeight + ");";
     ctx.fillRect(0,0,256,256);
+	
+	sendImageToNativeClient();
 }
 
 function brushHeightChanged(newValue)
