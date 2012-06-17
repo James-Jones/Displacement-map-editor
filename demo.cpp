@@ -2,7 +2,10 @@
 #include "maths.h"
 #include "cJSON.h"
 
+#include "dispmapped_vs.h"
+#ifdef ENABLE_LOADING_ICON
 #include "textured_vs.h"
+#endif
 #include "textured_ps.h"
 
 #include "jpgd.h"
@@ -24,52 +27,103 @@ const uint32_t VA_NORMAL_INDEX = 2;
 const int iDispMapWidth = 256;
 const int iDispMapHeight = 256;
 
-typedef struct DownloadContext_TAG
+class DownloadContext
 {
+public:
     int id;
-    PP_Resource hRenderContext;
-    PPB_OpenGLES2* psGL;
+    std::string data;
     int iDownloaded;
-} DownloadContext;
+};
 
-typedef struct Texture_TAG
+class Texture
 {
+public:
+    Texture() : hTextureGL(0),
+        image(0),
+        iWidth(0),
+        iHeight(0)
+    {
+    }
     GLuint hTextureGL;
     GLubyte* image;
     int iWidth;
     int iHeight;
-} Texture;
+};
 
-typedef struct
+class Transformations
 {
+public:
     float projection[4][4];
     float camera[4][4];
     float rot[4][4];
     float scale[4][4];
     float xform[4][4];
-} Transformations;
+};
 
-typedef struct Mesh_TAG
+class Mesh
 {
+public:
+    Mesh() : hVBO(0),
+        hIBO(0),
+        iIdxCount(0),
+        iVtxCount(0)
+    {
+    }
     GLuint hVBO;
     GLuint hIBO;
     int iIdxCount;
     int iVtxCount;
-} Mesh;
+};
 
-typedef struct DemoContext_TAG
+class DemoContext
 {
+public:
+    DemoContext() :
+        sDownloadBaseTexture(),
+        sDownloadMesh(),
+#ifdef ENABLE_LOADING_ICON
+        sDownloadLoadingTexture(),
+#endif
+        sDisplacementMap(),
+        sBaseMap(),
+#ifdef ENABLE_LOADING_ICON
+        sLoadingMap(),
+        hBaseMapShader(0),
+#endif
+        hDisplacementMapShader(0),
+        sMesh(),
+        sMeshTransform(),
+        sQuad(),
+        iHighlightEnabled(0),
+        fDispCoeff(0),
+        startTime(),
+        ui64BaseTimeMS(0),
+        fAngleY(0),
+        fAngleX(0),
+        fAngleModX(0),
+        fAngleModY(0)
+    {
+    }
+
     DownloadContext sDownloadBaseTexture;
     DownloadContext sDownloadMesh;
+#ifdef ENABLE_LOADING_ICON
+    DownloadContext sDownloadLoadingTexture;
+#endif
 
     Texture sDisplacementMap;
     Texture sBaseMap;
+#ifdef ENABLE_LOADING_ICON
+    Texture sLoadingMap;
 
-    GLuint hPassthroughShader;
+    GLuint hBaseMapShader;
+#endif
     GLuint hDisplacementMapShader;
 
     Mesh sMesh;
     Transformations sMeshTransform;
+
+    Mesh sQuad;
 
     //Shader constants
     int iHighlightEnabled;
@@ -83,7 +137,7 @@ typedef struct DemoContext_TAG
     float fAngleModX;
     float fAngleModY;
 
-} DemoContext;
+};
 
 DemoContext* psDemoContext = 0;
 
@@ -242,7 +296,7 @@ void LoadJSONMesh(PP_Resource context,
 
     iNumIndices = cJSON_GetArraySize(psIndices);
 
-    pui16Indices = (uint16_t*)malloc(sizeof(uint16_t) * iNumIndices);
+    pui16Indices = new uint16_t[iNumIndices];
 
     for(idx = 0; idx < iNumIndices; ++idx)
     {
@@ -252,9 +306,9 @@ void LoadJSONMesh(PP_Resource context,
 
     iNumVertices = cJSON_GetArraySize(psVertices) / 3; //GetArraySize will give the number of floats in vertex position array. Always XYZ.
 
-    pfVertices = (float*)malloc(sizeof(float) * iNumVertices * 3);
-    pfTexCoords = (float*)malloc(sizeof(float) * iNumVertices * 3);
-    pfNormals = (float*)malloc(sizeof(float) * iNumVertices * 3);
+    pfVertices = new float[iNumVertices * 3];
+    pfTexCoords = new float[iNumVertices * 3];
+    pfNormals = new float[iNumVertices * 3];
     for(vtx = 0; vtx < (iNumVertices * 3);)
     {
         cJSON* psVertex;
@@ -337,9 +391,9 @@ void LoadJSONMesh(PP_Resource context,
     gl->BufferData(context, GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort)*iNumIndices, pui16Indices, GL_STATIC_DRAW);
     gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    free(pui16Indices);
-    free(pfVertices);
-    free(pfTexCoords);
+    delete [] pui16Indices;
+    delete [] pfVertices;
+    delete [] pfTexCoords;
 
     *piNumIndices = iNumIndices;
     *piNumVertices = iNumVertices;
@@ -393,17 +447,45 @@ void DrawJSONMesh(PP_Resource context,
     gl->DrawElements(context, GL_TRIANGLES, iNumIndices, GL_UNSIGNED_SHORT, 0);
 }
 
-std::string g_Mesh;
+#ifdef ENABLE_LOADING_ICON
+void DrawQuad(PP_Resource context,
+                  PPB_OpenGLES2* gl,
+                  int iNumVertices,
+                  int iNumIndices,
+                  GLuint uiVBO,
+                  GLuint uiIBO)
+{
+    float afTransform[4][4];//The final matrix
 
-void MeshDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
+    gl->UseProgram(context, psDemoContext->hBaseMapShader);
+
+    Identity(afTransform);
+
+    gl->UniformMatrix4fv(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "Transform"), 1, GL_FALSE, (float*)&afTransform[0][0]);
+    gl->Uniform1i(context, gl->GetUniformLocation(context, psDemoContext->hDisplacementMapShader, "TextureBase"), 0);
+
+    gl->ActiveTexture(context, GL_TEXTURE0+1);
+    gl->BindTexture(context, GL_TEXTURE_2D, 0);
+    gl->ActiveTexture(context, GL_TEXTURE0);
+    gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sLoadingMap.hTextureGL);
+
+    gl->BindBuffer(context, GL_ARRAY_BUFFER, uiVBO);
+    gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, uiIBO);
+
+    gl->EnableVertexAttribArray(context, VA_POSITION_INDEX);
+    gl->EnableVertexAttribArray(context, VA_TEXCOORD_INDEX);
+    gl->DisableVertexAttribArray(context, VA_NORMAL_INDEX);
+
+    gl->VertexAttribPointer(context, VA_POSITION_INDEX, 2, GL_FLOAT, GL_FALSE, 0, 0);
+    gl->VertexAttribPointer(context, VA_TEXCOORD_INDEX, 2, GL_FLOAT, GL_FALSE, 0, (char*)(sizeof(GLfloat)*(iNumVertices*2)));
+
+    gl->DrawElements(context, GL_TRIANGLE_STRIP, iNumIndices, GL_UNSIGNED_SHORT, 0);
+}
+#endif
+
+void FileDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
 {
     DownloadContext* psDownloadContext = (DownloadContext*)pvUserData;
-    //PP_Resource context = psDownloadContext->hRenderContext;
-    //PPB_OpenGLES2* gl = psDownloadContext->psGL;
-
-    //char aszMessage[256];
-
-    DBG_LOG(DBG_LOG_PREFIX"MeshDownload Start");
 
     if(!iSuccessful)
     {
@@ -411,48 +493,56 @@ void MeshDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
         return;
     }
 
-    g_Mesh = fileContents;
-
-    /*LoadJSONMesh(context,
-        gl,
-        fileContents.c_str(),
-        &psDemoContext->sMeshTransform,
-        &psDemoContext->sMesh.iIdxCount,
-        &psDemoContext->sMesh.iVtxCount,
-        &psDemoContext->sMesh.hVBO,
-        &psDemoContext->sMesh.hIBO);*/
+    psDownloadContext->data = fileContents;
 
     psDownloadContext->iDownloaded = 1;
-
-    //sprintf(aszMessage, DBG_LOG_PREFIX"Index count: %d Vertex count: %d\n", psDemoContext->sMesh.iIdxCount,
-      //  psDemoContext->sMesh.iVtxCount);
-    //DBG_LOG(aszMessage);
-
-    DBG_LOG(DBG_LOG_PREFIX"MeshDownload End");
 }
 
-std::string g_JPEG;
-
-void TextureDownloaded(std::string fileContents, void* pvUserData, int iSuccessful)
+#ifdef ENABLE_LOADING_ICON
+void CreateQuadMesh(PP_Resource context,
+                    PPB_OpenGLES2* gl,
+                    int* piNumIndices,
+                    int* piNumVertices,
+                    GLuint* puiVBO,
+                    GLuint* puiIBO)
 {
-    DownloadContext* psDownloadContext = (DownloadContext*)pvUserData;
-    //PP_Resource context = psDownloadContext->hRenderContext;
-    //PPB_OpenGLES2* gl = psDownloadContext->psGL;
+    const GLfloat QUAD_HALF_WIDTH = 0.2f;
+    const GLfloat QUAD_HALF_HEIGHT = 0.2f;
+    const int iNumVertices = 4;
+    const int iNumIndices = 4;
 
-    DBG_LOG(DBG_LOG_PREFIX"TextureDonwloaded Start");
+	const GLfloat afVertices[] = {
+		-QUAD_HALF_WIDTH,-QUAD_HALF_HEIGHT,
+		QUAD_HALF_WIDTH, -QUAD_HALF_HEIGHT,
+		-QUAD_HALF_WIDTH, QUAD_HALF_HEIGHT,
+		QUAD_HALF_WIDTH, QUAD_HALF_HEIGHT,
+	};
 
-    if(!iSuccessful)
-    {
-        DBG_LOG(DBG_LOG_PREFIX"Failed to download texture");
-        return;
-    }
+	const GLfloat afTexCoords[] = {
+		0.0f,1.0f,
+		1.0f,1.0f,
+		0.0f,0.0f,
+		1.0f, 0.0f,
+	};
 
-    g_JPEG = fileContents;
+    const GLushort aui16Indices[] = {
+        0, 1, 2, 3
+    };
 
-    psDownloadContext->iDownloaded = 1;
+    gl->GenBuffers(context, 1, puiVBO);
+    gl->GenBuffers(context, 1, puiIBO);
 
-    DBG_LOG(DBG_LOG_PREFIX"TextureDownloaded End");
+    gl->BindBuffer(context, GL_ARRAY_BUFFER, *puiVBO);
+    gl->BufferData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*4), NULL, GL_STATIC_DRAW);
+    gl->BufferSubData(context, GL_ARRAY_BUFFER, 0, sizeof(GLfloat)*(iNumVertices*2), afVertices);
+    gl->BufferSubData(context, GL_ARRAY_BUFFER, sizeof(GLfloat)*(iNumVertices*2), sizeof(GLfloat)*(iNumVertices*2), afTexCoords);
+    gl->BindBuffer(context, GL_ARRAY_BUFFER, 0);
+
+    gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, *puiIBO);
+    gl->BufferData(context, GL_ELEMENT_ARRAY_BUFFER, sizeof(GLushort)*iNumIndices, aui16Indices, GL_STATIC_DRAW);
+    gl->BindBuffer(context, GL_ELEMENT_ARRAY_BUFFER, 0);
 }
+#endif
 
 void DemoInit(NaCLContext* psNaCLContext, int width, int height)
 {
@@ -462,30 +552,52 @@ void DemoInit(NaCLContext* psNaCLContext, int width, int height)
     const float aspectRatio = (float)width / (float)height;
     const float fieldOfView = 45.0f;
 
-    DBG_LOG(DBG_LOG_PREFIX"DemoInit Start");
-
     if(!psDemoContext)
     {
-        psDemoContext = (DemoContext*)calloc(1, sizeof(DemoContext));
+        psDemoContext = new DemoContext();
 
-        //Start the async downloads early.
+#ifdef ENABLE_LOADING_ICON
+        DownloadContext* psLoadingTextureDownloadContext = &psDemoContext->sDownloadLoadingTexture;
+        psLoadingTextureDownloadContext->id = 2;
+        psLoadingTextureDownloadContext->iDownloaded = 0;
 
-        DownloadContext* psTextureDownloadContext = &psDemoContext->sDownloadBaseTexture;//(DownloadContext*)malloc(sizeof(DownloadContext));
-        psTextureDownloadContext->id = 0;
-        psTextureDownloadContext->hRenderContext = context;
-        psTextureDownloadContext->psGL = gl;
-        psTextureDownloadContext->iDownloaded = 0;
+        StartDownload(psNaCLContext, "dload/loading.jpg", psLoadingTextureDownloadContext, FileDownloaded);
+#endif
 
-        StartDownload(psNaCLContext, "dload/checkerboard.jpg", psTextureDownloadContext, TextureDownloaded);
+        DownloadContext* psBaseTextureDownloadContext = &psDemoContext->sDownloadBaseTexture;
+        psBaseTextureDownloadContext->id = 0;
+        psBaseTextureDownloadContext->iDownloaded = 0;
 
-        DownloadContext* psMeshDownloadContext = &psDemoContext->sDownloadMesh;//(DownloadContext*)malloc(sizeof(DownloadContext));
+        StartDownload(psNaCLContext, "dload/checkerboard.jpg", psBaseTextureDownloadContext, FileDownloaded);
+
+        DownloadContext* psMeshDownloadContext = &psDemoContext->sDownloadMesh;
         psMeshDownloadContext->id = 1;
-        psMeshDownloadContext->hRenderContext = context;
-        psMeshDownloadContext->psGL = gl;
         psMeshDownloadContext->iDownloaded = 0;
 
-        StartDownload(psNaCLContext, "dload/cube.json", psMeshDownloadContext, MeshDownloaded);
+        StartDownload(psNaCLContext, "dload/cube.json", psMeshDownloadContext, FileDownloaded);
     }
+
+#if 0
+#ifdef ENABLE_LOADING_ICON
+    if(psDemoContext->sDownloadLoadingTexture.iDownloaded == 2)
+    {
+        //Re-create GL objects
+        psDemoContext->sDownloadLoadingTexture.iDownloaded = 1;
+    }
+#endif
+
+    if(psDemoContext->sDownloadBaseTexture.iDownloaded == 2)
+    {
+        //Re-create GL objects
+        psDemoContext->sDownloadBaseTexture.iDownloaded = 1;
+    }
+
+    if(psDemoContext->sDownloadMesh.iDownloaded == 2)
+    {
+        //Re-create GL objects
+        psDemoContext->sDownloadMesh.iDownloaded = 1;
+    }
+#endif
 
     Identity(psDemoContext->sMeshTransform.projection);
     Persp(psDemoContext->sMeshTransform.projection, fieldOfView, aspectRatio,
@@ -495,14 +607,12 @@ void DemoInit(NaCLContext* psNaCLContext, int width, int height)
     {
         int i;
 
-        GLubyte* textureImage = (GLubyte*)malloc((iDispMapWidth*iDispMapHeight)*sizeof(GLubyte));
+        GLubyte* textureImage = new GLubyte[iDispMapWidth*iDispMapHeight];
 
         for(i=0; i<(iDispMapWidth*iDispMapHeight); ++i)
         {
             textureImage[i] = 0;
         }
-
-        DBG_LOG(DBG_LOG_PREFIX"DemoInit A");
 
         psDemoContext->sDisplacementMap.image = textureImage;
 
@@ -511,25 +621,27 @@ void DemoInit(NaCLContext* psNaCLContext, int width, int height)
         psDemoContext->ui64BaseTimeMS = GetElapsedTimeMS();
         psDemoContext->fAngleY = 0;
         psDemoContext->fAngleX = 0;
-        //int iHighlightEnabled = 0;
         psDemoContext->fDispCoeff = 0.5f;
-
-        DBG_LOG(DBG_LOG_PREFIX"DemoInit B");
     }
 
-    psDemoContext->hDisplacementMapShader = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
+    psDemoContext->hDisplacementMapShader = CreateProgram(context, gl, psz_dispmapped_vs, psz_textured_ps);
 
-    //psDemoContext->hPassthroughShader = CreateProgram(context, gl, psz_passthrough_vs, psz_passthrough_ps);
+#ifdef ENABLE_LOADING_ICON
+    psDemoContext->hBaseMapShader = CreateProgram(context, gl, psz_textured_vs, psz_textured_ps);
 
-    DBG_LOG(DBG_LOG_PREFIX"DemoInit C");
+    CreateQuadMesh(context,
+        gl,
+        &psDemoContext->sQuad.iIdxCount,
+        &psDemoContext->sQuad.iVtxCount,
+        &psDemoContext->sQuad.hVBO,
+        &psDemoContext->sQuad.hIBO);
+#endif
 
     gl->GenTextures(context, 1, &psDemoContext->sDisplacementMap.hTextureGL);
 
     gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sDisplacementMap.hTextureGL);
 
     gl->TexImage2D(context, GL_TEXTURE_2D, 0, GL_LUMINANCE, iDispMapWidth, iDispMapHeight, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, psDemoContext->sDisplacementMap.image);
-
-    DBG_LOG(DBG_LOG_PREFIX"DemoInit D");
 
     gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -541,24 +653,6 @@ void DemoInit(NaCLContext* psNaCLContext, int width, int height)
         0.f,1.f,0.f);
 
     gl->Enable(context, GL_CULL_FACE);
-
-    DBG_LOG(DBG_LOG_PREFIX"DemoInit End");
-}
-
-void DrawLoadingWheel()
-{
-    /*for(GLint i=30;i>0;--i)//build a circle with 30 line segments
-    {
-        cosine=static_cast<GLfloat>(cos(i*2*PI/30.0)*(PLAYER_WIDTH));
-        sine=static_cast<GLfloat>(sin(i*2*PI/30.0)*(PLAYER_HEIGHT));
-        
-        pfVertices[k++] = cosine;
-        pfVertices[k++] = sine;
-
-        pfColour[m++] = 1;
-        pfColour[m++] = 0;
-        pfColour[m++] = 0;
-    }*/
 }
 
 void DemoRender(NaCLContext* psNaCLContext)
@@ -572,7 +666,7 @@ void DemoRender(NaCLContext* psNaCLContext)
     uint64_t ui64ElapsedTime = GetElapsedTimeMS();
     uint64_t ui64DeltaTimeMS = ui64ElapsedTime - psDemoContext->ui64BaseTimeMS;
 
-    //DBG_LOG(DBG_LOG_PREFIX"DemoRender Start");
+    gl->Viewport(context, 0, 0, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
 
     gl->Enable(context, GL_DEPTH_TEST);
 
@@ -583,9 +677,68 @@ void DemoRender(NaCLContext* psNaCLContext)
     {
         gl->ClearColor(context, 0.0, 0.0, 1.0, 1.0f);
         gl->Clear(context, GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        DrawLoadingWheel();
 
-        //DBG_LOG(DBG_LOG_PREFIX"DemoRender End A");
+#ifdef ENABLE_LOADING_ICON
+        if(psDemoContext->sDownloadLoadingTexture.iDownloaded == 1)
+        {
+            unsigned char* jpeg = 0;
+            int jpegWidth = 0;
+            int jpegHeight = 0;
+            int iNumComponents = 0;
+            GLenum eFormat;
+
+            gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sLoadingMap.hTextureGL);
+
+            jpeg = jpgd::decompress_jpeg_image_from_memory((unsigned char*)psDemoContext->sDownloadLoadingTexture.data.c_str(),
+                psDemoContext->sDownloadLoadingTexture.data.length(), 
+                &jpegWidth,
+                &jpegHeight,
+                &iNumComponents,
+                3);
+
+            if(!jpeg)
+            {
+                DBG_LOG(DBG_LOG_PREFIX"Bad jpeg texture");
+                return;
+            }
+
+            switch(iNumComponents)
+            {
+                case 3:
+                {
+                    eFormat = GL_RGB;
+                    break;
+                }
+                case 4:
+                {
+                    eFormat = GL_RGBA;
+                    break;
+                }
+                default:
+                {
+                    eFormat = GL_LUMINANCE;
+                    break;
+                }
+            }
+
+            gl->TexImage2D(context, GL_TEXTURE_2D, 0, eFormat, jpegWidth, jpegHeight, 0, eFormat, GL_UNSIGNED_BYTE, jpeg);
+
+            gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            gl->TexParameteri(context, GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+            psDemoContext->sDownloadLoadingTexture.iDownloaded = 2;
+        }
+
+        if(psDemoContext->sDownloadLoadingTexture.iDownloaded == 2)
+        {
+            DrawQuad(context,
+                gl,
+                psDemoContext->sQuad.iVtxCount,
+                psDemoContext->sQuad.iIdxCount,
+                psDemoContext->sQuad.hVBO,
+                psDemoContext->sQuad.hIBO);
+        }
+#endif
         return;
     }
 
@@ -593,7 +746,7 @@ void DemoRender(NaCLContext* psNaCLContext)
     {
         LoadJSONMesh(context,
         gl,
-        g_Mesh.c_str(),
+        psDemoContext->sDownloadMesh.data.c_str(),
         &psDemoContext->sMeshTransform,
         &psDemoContext->sMesh.iIdxCount,
         &psDemoContext->sMesh.iVtxCount,
@@ -613,8 +766,12 @@ void DemoRender(NaCLContext* psNaCLContext)
 
         gl->BindTexture(context, GL_TEXTURE_2D, psDemoContext->sBaseMap.hTextureGL);
 
-        jpeg = jpgd::decompress_jpeg_image_from_memory((unsigned char*)g_JPEG.c_str(), g_JPEG.length(), 
-                                       &jpegWidth, &jpegHeight, &iNumComponents, 3);
+        jpeg = jpgd::decompress_jpeg_image_from_memory((unsigned char*)psDemoContext->sDownloadBaseTexture.data.c_str(),
+            psDemoContext->sDownloadBaseTexture.data.length(), 
+            &jpegWidth,
+            &jpegHeight,
+            &iNumComponents,
+            3);
 
         if(!jpeg)
         {
@@ -677,8 +834,6 @@ void DemoRender(NaCLContext* psNaCLContext)
         psDemoContext->sMesh.iIdxCount,
         psDemoContext->sMesh.hVBO,
         psDemoContext->sMesh.hIBO);
-
-    //DBG_LOG(DBG_LOG_PREFIX"DemoRender End B");
 }
 
 void DemoHandleString(NaCLContext* psNaCLContext, const char* str, const uint32_t ui32StrLength)
@@ -711,9 +866,6 @@ void DemoHandleString(NaCLContext* psNaCLContext, const char* str, const uint32_
         nextStr += 5;
 
 #if 1
-
-        DBG_LOG(DBG_LOG_PREFIX"Updating dmap");
-
         uint32_t i = 0;
 
         //Convert space delimited string of texels to integer values
@@ -747,7 +899,7 @@ void DemoHandleString(NaCLContext* psNaCLContext, const char* str, const uint32_
 
         if(psDemoContext->sDisplacementMap.image)
         {
-            free(psDemoContext->sDisplacementMap.image);
+            delete [] psDemoContext->sDisplacementMap.image;
             psDemoContext->sDisplacementMap.image = 0;
         }
 
@@ -858,10 +1010,10 @@ void DemoHandleKeyUp(uint32_t ui32KeyCode)
 
 void DemoEnd()
 {
-    free(psDemoContext->sDisplacementMap.image);
+    delete [] psDemoContext->sDisplacementMap.image;
     psDemoContext->sDisplacementMap.image = 0;
 
-    free(psDemoContext);
+    delete psDemoContext;
     psDemoContext = NULL;
 }
 

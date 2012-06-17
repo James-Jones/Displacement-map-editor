@@ -34,56 +34,17 @@ void SendInteger(int val)
     psNaCLContext->psMessagingInterface->PostMessage(psNaCLContext->hModule, PP_MakeInt32(val));
 }
 
-void DrawFrame(void* user_data, int32_t result)
+void DrawFrame(void* user_data, int32_t result) 
 {
-	PP_CompletionCallback swapBuffersCallback;
+    glSetCurrentContextPPAPI(psNaCLContext->hRenderContext);
 
-	DemoRender(psNaCLContext);
+    DemoRender(psNaCLContext);
 
-	swapBuffersCallback.func = DrawFrame;
-	swapBuffersCallback.user_data = 0;
-	swapBuffersCallback.flags = PP_COMPLETIONCALLBACK_FLAG_NONE;
+    glSetCurrentContextPPAPI(0);
 
-	psNaCLContext->psG3D->SwapBuffers(psNaCLContext->hRenderContext, swapBuffersCallback);
+    PP_CompletionCallback cc = PP_MakeCompletionCallback(DrawFrame, 0);
+    psNaCLContext->psG3D->SwapBuffers(psNaCLContext->hRenderContext, cc);
 }
-
-void InitGL(void* user_data, int32_t result)
-{
-	int32_t attribs[] = {
-	PP_GRAPHICS3DATTRIB_ALPHA_SIZE, 8,
-	PP_GRAPHICS3DATTRIB_BLUE_SIZE, 8,
-	PP_GRAPHICS3DATTRIB_GREEN_SIZE, 8,
-	PP_GRAPHICS3DATTRIB_RED_SIZE, 8,
-	PP_GRAPHICS3DATTRIB_DEPTH_SIZE, 16,
-	PP_GRAPHICS3DATTRIB_STENCIL_SIZE, 0,
-	PP_GRAPHICS3DATTRIB_SAMPLES, 4,
-	PP_GRAPHICS3DATTRIB_SAMPLE_BUFFERS, 1,
-	PP_GRAPHICS3DATTRIB_WIDTH, psNaCLContext->i32PluginWidth,
-	PP_GRAPHICS3DATTRIB_HEIGHT, psNaCLContext->i32PluginHeight,
-	PP_GRAPHICS3DATTRIB_NONE,
-	};
-	
-	PP_CompletionCallback swapBuffersCallback;
-
-	psNaCLContext->hRenderContext = psNaCLContext->psG3D->Create(psNaCLContext->hModule, NULL, attribs);
-	psNaCLContext->psInstanceInterface->BindGraphics(psNaCLContext->hModule, psNaCLContext->hRenderContext);
-
-	psNaCLContext->psGL->Viewport(psNaCLContext->hRenderContext, 0, 0, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
-
-	psNaCLContext->psGL->ClearColor(psNaCLContext->hRenderContext, 0.0f, 1.0f, 0.0f, 1.0f);
-	psNaCLContext->psGL->Clear(psNaCLContext->hRenderContext, GL_COLOR_BUFFER_BIT);
-
-	DemoInit(psNaCLContext, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
-
-	swapBuffersCallback.func = 0;
-	swapBuffersCallback.user_data = 0;
-	swapBuffersCallback.flags = PP_COMPLETIONCALLBACK_FLAG_NONE;
-
-	psNaCLContext->psG3D->SwapBuffers(psNaCLContext->hRenderContext, swapBuffersCallback);
-
-	DrawFrame(0, 0);
-}
-
 
 /**
  * Called when the NaCl module is instantiated on the web page. The identifier
@@ -112,6 +73,8 @@ static PP_Bool Instance_DidCreate(PP_Instance instance,
                                   const char* argn[],
                                   const char* argv[])
 {
+    psNaCLContext->hRenderContext = 0;
+    psNaCLContext->hModule = instance;
     psNaCLContext->psInputEventInterface->RequestInputEvents(instance, PP_INPUTEVENT_CLASS_KEYBOARD | PP_INPUTEVENT_CLASS_MOUSE);
     return PP_TRUE;
 }
@@ -125,6 +88,9 @@ static PP_Bool Instance_DidCreate(PP_Instance instance,
  *     module.
  */
 static void Instance_DidDestroy(PP_Instance instance) {
+    psNaCLContext->psCore->ReleaseResource(psNaCLContext->hRenderContext);
+    psNaCLContext->hRenderContext = 0;
+    psNaCLContext->hModule = 0;
 }
 
 /**
@@ -142,6 +108,7 @@ static void Instance_DidDestroy(PP_Instance instance) {
 static void Instance_DidChangeView(PP_Instance instance,
                                    PP_Resource view_resource) {
 	struct PP_Rect pos;
+    int bFirstCall = 0;
 
 	psNaCLContext->psView->GetRect(view_resource, &pos);
 
@@ -153,9 +120,45 @@ static void Instance_DidChangeView(PP_Instance instance,
 	psNaCLContext->i32PluginWidth = pos.size.width;
 	psNaCLContext->i32PluginHeight = pos.size.height;
 
-	psNaCLContext->hModule = instance;
+    if(psNaCLContext->hRenderContext == 0)
+    {
+        bFirstCall = 1;
+    }
 
-	InitGL(0, 0);
+    if(psNaCLContext->hRenderContext == 0)
+    {
+	    int32_t attribs[] = {
+	    PP_GRAPHICS3DATTRIB_ALPHA_SIZE, 8,
+	    PP_GRAPHICS3DATTRIB_BLUE_SIZE, 8,
+	    PP_GRAPHICS3DATTRIB_GREEN_SIZE, 8,
+	    PP_GRAPHICS3DATTRIB_RED_SIZE, 8,
+	    PP_GRAPHICS3DATTRIB_DEPTH_SIZE, 16,
+	    PP_GRAPHICS3DATTRIB_STENCIL_SIZE, 0,
+	    PP_GRAPHICS3DATTRIB_SAMPLES, 4,
+	    PP_GRAPHICS3DATTRIB_SAMPLE_BUFFERS, 1,
+	    PP_GRAPHICS3DATTRIB_WIDTH, psNaCLContext->i32PluginWidth,
+	    PP_GRAPHICS3DATTRIB_HEIGHT, psNaCLContext->i32PluginHeight,
+	    PP_GRAPHICS3DATTRIB_NONE,
+	    };
+
+	    psNaCLContext->hRenderContext = psNaCLContext->psG3D->Create(psNaCLContext->hModule, NULL, attribs);
+	    psNaCLContext->psInstanceInterface->BindGraphics(psNaCLContext->hModule, psNaCLContext->hRenderContext);
+
+        if(bFirstCall)
+        {
+	        DemoInit(psNaCLContext, psNaCLContext->i32PluginWidth, psNaCLContext->i32PluginHeight);
+        }
+
+        PP_CompletionCallback cc = PP_MakeCompletionCallback(DrawFrame, 0);
+        psNaCLContext->psCore->CallOnMainThread(0, cc, PP_OK);
+    }
+    else
+    {
+        psNaCLContext->psG3D->ResizeBuffers(psNaCLContext->hRenderContext,
+            psNaCLContext->i32PluginWidth,
+            psNaCLContext->i32PluginHeight);
+
+    }
 }
 
 /**

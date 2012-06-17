@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-const int READ_BUFFER_SIZE = 1048576;//Stream in 1MB chunks. Previously 32768 bytes;
+const int READ_BUFFER_SIZE = 1048576;//Stream in 1MB chunks.
 
 class NaCLFile
 {
